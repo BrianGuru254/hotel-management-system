@@ -1,6 +1,8 @@
 package com.hrms.backend.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -8,35 +10,45 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "organizations")
+@Table(
+    name = "branches",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uq_branches_organization_code",
+            columnNames = {"organization_id", "code"}
+        )
+    }
+)
 @Getter
 @Setter
-public class Organization {
+public class Branch {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(
+        name = "organization_id",
+        nullable = false,
+        foreignKey = @ForeignKey(name = "fk_branches_organization")
+    )
+    private Organization organization;
+
     @Column(nullable = false, length = 150)
     private String name;
 
-    @Column(name = "legal_name", length = 200)
-    private String legalName;
+    @Column(nullable = false, length = 50)
+    private String code;
 
-    @Column(name = "registration_number", length = 100)
-    private String registrationNumber;
-
-    @Column(name = "tax_number", length = 100)
-    private String taxNumber;
+    @Column(columnDefinition = "text")
+    private String description;
 
     @Column(length = 150)
     private String email;
 
     @Column(length = 50)
     private String phone;
-
-    @Column(length = 255)
-    private String website;
 
     @Column(name = "address_line_1", length = 255)
     private String addressLine1;
@@ -56,7 +68,8 @@ public class Organization {
     @Column(name = "postal_code", length = 30)
     private String postalCode;
 
-    @Column(name = "currency_code", nullable = false, length = 3)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "currency_code", nullable = false, length = 3, columnDefinition = "char(3)")
     private String currencyCode = "KES";
 
     @Column(nullable = false, length = 100)

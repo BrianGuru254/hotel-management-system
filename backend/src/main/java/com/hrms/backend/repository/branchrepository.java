@@ -14,4 +14,6 @@ public interface BranchRepository extends JpaRepository<Branch, UUID> {
             UUID organizationId,
             String code
     );
+
+    boolean existsByOrganizationIdAndCodeIgnoreCaseAndIdNot(UUID organizationId, String code, UUID id);
 }

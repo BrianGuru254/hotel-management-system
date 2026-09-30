@@ -1,6 +1,8 @@
 package com.hrms.backend.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -56,7 +58,8 @@ public class Organization {
     @Column(name = "postal_code", length = 30)
     private String postalCode;
 
-    @Column(name = "currency_code", nullable = false, length = 3)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "currency_code", nullable = false, length = 3, columnDefinition = "char(3)")
     private String currencyCode = "KES";
 
     @Column(nullable = false, length = 100)
