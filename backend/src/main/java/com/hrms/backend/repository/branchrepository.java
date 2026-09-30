@@ -10,6 +10,10 @@ public interface BranchRepository extends JpaRepository<Branch, UUID> {
 
     List<Branch> findByOrganizationId(UUID organizationId);
 
+    List<Branch> findByOrganizationIdIn(Iterable<UUID> organizationIds);
+
+    List<Branch> findByIdIn(Iterable<UUID> branchIds);
+
     boolean existsByOrganizationIdAndCodeIgnoreCase(
             UUID organizationId,
             String code

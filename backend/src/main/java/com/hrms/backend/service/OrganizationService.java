@@ -17,16 +17,30 @@ import java.util.UUID;
 @Transactional
 public class OrganizationService {
     private final OrganizationRepository organizations;
+    private final ScopeAuthorizationService authorization;
 
-    public OrganizationService(OrganizationRepository organizations) { this.organizations = organizations; }
+    public OrganizationService(OrganizationRepository organizations, ScopeAuthorizationService authorization) {
+        this.organizations = organizations;
+        this.authorization = authorization;
+    }
 
     @Transactional(readOnly = true)
-    public List<OrganizationResponse> findAll() { return organizations.findAll().stream().map(this::toResponse).toList(); }
+    public List<OrganizationResponse> findAll() {
+        ScopeVisibility visibility = authorization.visibility("ORGANIZATION_READ");
+        List<Organization> found = visibility.systemWide() ? organizations.findAll()
+                : organizations.findAllById(visibility.organizationIds());
+        return found.stream().map(this::toResponse).toList();
+    }
 
     @Transactional(readOnly = true)
-    public OrganizationResponse findById(UUID id) { return toResponse(get(id)); }
+    public OrganizationResponse findById(UUID id) {
+        Organization organization = get(id);
+        authorization.requireCapability("ORGANIZATION_READ", organization.getId(), null, null, null);
+        return toResponse(organization);
+    }
 
     public OrganizationResponse create(OrganizationRequest request) {
+        authorization.requireCapability("ORGANIZATION_CREATE", null, null, null, null);
         if (organizations.existsByNameIgnoreCase(request.getName().trim()))
             throw new DuplicateResourceException("Organization name already exists");
         Organization organization = new Organization();
@@ -37,6 +51,7 @@ public class OrganizationService {
 
     public OrganizationResponse update(UUID id, OrganizationRequest request) {
         Organization organization = get(id);
+        authorization.requireCapability("ORGANIZATION_UPDATE", organization.getId(), null, null, null);
         if (organizations.existsByNameIgnoreCaseAndIdNot(request.getName().trim(), id))
             throw new DuplicateResourceException("Organization name already exists");
         apply(organization, request);
@@ -46,11 +61,16 @@ public class OrganizationService {
 
     public OrganizationResponse setActive(UUID id, boolean active) {
         Organization organization = get(id);
+        authorization.requireCapability("ORGANIZATION_UPDATE", organization.getId(), null, null, null);
         organization.setActive(active);
         return toResponse(organizations.save(organization));
     }
 
-    public void delete(UUID id) { organizations.delete(get(id)); }
+    public void delete(UUID id) {
+        Organization organization = get(id);
+        authorization.requireCapability("ORGANIZATION_DELETE", organization.getId(), null, null, null);
+        organizations.delete(organization);
+    }
 
     private Organization get(UUID id) { return organizations.findById(id).orElseThrow(() -> new ResourceNotFoundException("Organization", id)); }
 

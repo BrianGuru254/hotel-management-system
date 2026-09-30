@@ -24,34 +24,44 @@ public class PropertyService {
     private final PropertyRepository properties;
     private final OrganizationRepository organizations;
     private final BranchRepository branches;
+    private final ScopeAuthorizationService authorization;
 
-    public PropertyService(PropertyRepository properties, OrganizationRepository organizations, BranchRepository branches) {
+    public PropertyService(PropertyRepository properties, OrganizationRepository organizations, BranchRepository branches,
+                           ScopeAuthorizationService authorization) {
         this.properties = properties;
         this.organizations = organizations;
         this.branches = branches;
+        this.authorization = authorization;
     }
 
     @Transactional(readOnly = true)
     public List<PropertyResponse> findAll(UUID organizationId, UUID branchId) {
-        if (branchId != null) {
-            Branch branch = requireBranch(branchId);
-            if (organizationId != null && !branch.getOrganization().getId().equals(organizationId)) {
-                throw new InvalidRelationshipException("The branch does not belong to the supplied organization");
-            }
-            if (organizationId != null) requireOrganization(organizationId);
-            return properties.findByBranchId(branchId).stream().map(this::toResponse).toList();
+        ScopeVisibility visibility = authorization.visibility("PROPERTY_READ");
+        java.util.Map<UUID, Property> candidates = new java.util.LinkedHashMap<>();
+        if (visibility.systemWide()) {
+            List<Property> found = branchId != null ? properties.findByBranchId(branchId)
+                    : organizationId != null ? properties.findByOrganizationId(organizationId) : properties.findAll();
+            found.forEach(property -> candidates.put(property.getId(), property));
+        } else {
+            if (!visibility.organizationIds().isEmpty()) properties.findByOrganizationIdIn(visibility.organizationIds()).forEach(p -> candidates.put(p.getId(), p));
+            if (!visibility.branchIds().isEmpty()) properties.findByBranchIdIn(visibility.branchIds()).forEach(p -> candidates.put(p.getId(), p));
+            if (!visibility.propertyIds().isEmpty()) properties.findByIdIn(visibility.propertyIds()).forEach(p -> candidates.put(p.getId(), p));
         }
-        if (organizationId != null) {
-            requireOrganization(organizationId);
-            return properties.findByOrganizationId(organizationId).stream().map(this::toResponse).toList();
-        }
-        return properties.findAll().stream().map(this::toResponse).toList();
+        return candidates.values().stream()
+                .filter(p -> organizationId == null || p.getOrganization().getId().equals(organizationId))
+                .filter(p -> branchId == null || p.getBranch().getId().equals(branchId))
+                .map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public PropertyResponse findById(UUID id) { return toResponse(requireProperty(id)); }
+    public PropertyResponse findById(UUID id) {
+        Property property = requireProperty(id);
+        authorization.requireCapability("PROPERTY_READ", property.getOrganization().getId(), property.getBranch().getId(), property.getId(), null);
+        return toResponse(property);
+    }
 
     public PropertyResponse create(PropertyRequest request) {
+        authorization.requireCapability("PROPERTY_CREATE", request.getOrganizationId(), request.getBranchId(), null, null);
         Organization organization = requireOrganization(request.getOrganizationId());
         Branch branch = requireBranch(request.getBranchId());
         validateOwnership(organization, branch);
@@ -68,9 +78,13 @@ public class PropertyService {
 
     public PropertyResponse update(UUID id, PropertyRequest request) {
         Property property = requireProperty(id);
+        authorization.requireCapability("PROPERTY_UPDATE", property.getOrganization().getId(), property.getBranch().getId(), property.getId(), null);
         Organization organization = requireOrganization(request.getOrganizationId());
         Branch branch = requireBranch(request.getBranchId());
         validateOwnership(organization, branch);
+        UUID targetPropertyId = organization.getId().equals(property.getOrganization().getId())
+                && branch.getId().equals(property.getBranch().getId()) ? property.getId() : null;
+        authorization.requireCapability("PROPERTY_UPDATE", organization.getId(), branch.getId(), targetPropertyId, null);
         if (properties.existsByBranchIdAndCodeIgnoreCaseAndIdNot(branch.getId(), normalizeCode(request.getCode()), id)) {
             throw new DuplicateResourceException("Property code already exists for this branch");
         }
@@ -83,11 +97,16 @@ public class PropertyService {
 
     public PropertyResponse setActive(UUID id, boolean active) {
         Property property = requireProperty(id);
+        authorization.requireCapability("PROPERTY_UPDATE", property.getOrganization().getId(), property.getBranch().getId(), property.getId(), null);
         property.setActive(active);
         return toResponse(properties.save(property));
     }
 
-    public void delete(UUID id) { properties.delete(requireProperty(id)); }
+    public void delete(UUID id) {
+        Property property = requireProperty(id);
+        authorization.requireCapability("PROPERTY_DELETE", property.getOrganization().getId(), property.getBranch().getId(), property.getId(), null);
+        properties.delete(property);
+    }
 
     private void validateOwnership(Organization organization, Branch branch) {
         if (!branch.getOrganization().getId().equals(organization.getId())) {

@@ -23,6 +23,7 @@ import static org.mockito.Mockito.*;
 class BranchServiceTest {
     @Mock BranchRepository branches;
     @Mock OrganizationRepository organizations;
+    @Mock ScopeAuthorizationService authorization;
     @InjectMocks BranchService service;
 
     @Test void rejectsUnknownOrganization() {
@@ -37,7 +38,10 @@ class BranchServiceTest {
         UUID organizationId = UUID.randomUUID();
         UUID branchId = UUID.randomUUID();
         BranchRequest request = new BranchRequest(); request.setOrganizationId(organizationId); request.setName("Downtown"); request.setCode("DT");
-        when(branches.findById(branchId)).thenReturn(Optional.of(new com.hrms.backend.entity.Branch()));
+        com.hrms.backend.entity.Branch existing = new com.hrms.backend.entity.Branch();
+        Organization existingOrganization = new Organization(); existingOrganization.setId(UUID.randomUUID());
+        existing.setOrganization(existingOrganization);
+        when(branches.findById(branchId)).thenReturn(Optional.of(existing));
         when(organizations.findById(organizationId)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> service.update(branchId, request));

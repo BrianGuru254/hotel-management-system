@@ -20,21 +20,41 @@ import java.util.UUID;
 public class BranchService {
     private final BranchRepository branches;
     private final OrganizationRepository organizations;
+    private final ScopeAuthorizationService authorization;
 
-    public BranchService(BranchRepository branches, OrganizationRepository organizations) { this.branches = branches; this.organizations = organizations; }
-
-    @Transactional(readOnly = true)
-    public List<BranchResponse> findAll(UUID organizationId) {
-        if (organizationId == null) return branches.findAll().stream().map(this::toResponse).toList();
-        requireOrganization(organizationId);
-        return branches.findByOrganizationId(organizationId).stream().map(this::toResponse).toList();
+    public BranchService(BranchRepository branches, OrganizationRepository organizations, ScopeAuthorizationService authorization) {
+        this.branches = branches;
+        this.organizations = organizations;
+        this.authorization = authorization;
     }
 
     @Transactional(readOnly = true)
-    public BranchResponse findById(UUID id) { return toResponse(get(id)); }
+    public List<BranchResponse> findAll(UUID organizationId) {
+        ScopeVisibility visibility = authorization.visibility("BRANCH_READ");
+        List<Branch> visible;
+        if (visibility.systemWide()) visible = organizationId == null ? branches.findAll() : branches.findByOrganizationId(organizationId);
+        else {
+            List<Branch> scoped = new java.util.ArrayList<>();
+            if (!visibility.organizationIds().isEmpty()) scoped.addAll(branches.findByOrganizationIdIn(visibility.organizationIds()));
+            if (!visibility.branchIds().isEmpty()) scoped.addAll(branches.findByIdIn(visibility.branchIds()));
+            java.util.Map<UUID, Branch> distinct = new java.util.LinkedHashMap<>();
+            scoped.stream().filter(branch -> organizationId == null || branch.getOrganization().getId().equals(organizationId))
+                    .forEach(branch -> distinct.put(branch.getId(), branch));
+            visible = List.copyOf(distinct.values());
+        }
+        return visible.stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public BranchResponse findById(UUID id) {
+        Branch branch = get(id);
+        authorization.requireCapability("BRANCH_READ", branch.getOrganization().getId(), branch.getId(), null, null);
+        return toResponse(branch);
+    }
 
     public BranchResponse create(BranchRequest request) {
         Organization organization = requireOrganization(request.getOrganizationId());
+        authorization.requireCapability("BRANCH_CREATE", organization.getId(), null, null, null);
         if (branches.existsByOrganizationIdAndCodeIgnoreCase(organization.getId(), request.getCode().trim()))
             throw new DuplicateResourceException("Branch code already exists for this organization");
         Branch branch = new Branch(); branch.setOrganization(organization); apply(branch, request);
@@ -44,7 +64,11 @@ public class BranchService {
 
     public BranchResponse update(UUID id, BranchRequest request) {
         Branch branch = get(id);
+        authorization.requireCapability("BRANCH_UPDATE", branch.getOrganization().getId(), branch.getId(), null, null);
         Organization organization = requireOrganization(request.getOrganizationId());
+        if (!branch.getOrganization().getId().equals(organization.getId())) {
+            authorization.requireCapability("BRANCH_CREATE", organization.getId(), null, null, null);
+        }
         if (branches.existsByOrganizationIdAndCodeIgnoreCaseAndIdNot(organization.getId(), request.getCode().trim(), id))
             throw new DuplicateResourceException("Branch code already exists for this organization");
         branch.setOrganization(organization); apply(branch, request);
@@ -52,8 +76,17 @@ public class BranchService {
         return toResponse(branches.save(branch));
     }
 
-    public BranchResponse setActive(UUID id, boolean active) { Branch branch = get(id); branch.setActive(active); return toResponse(branches.save(branch)); }
-    public void delete(UUID id) { branches.delete(get(id)); }
+    public BranchResponse setActive(UUID id, boolean active) {
+        Branch branch = get(id);
+        authorization.requireCapability("BRANCH_UPDATE", branch.getOrganization().getId(), branch.getId(), null, null);
+        branch.setActive(active);
+        return toResponse(branches.save(branch));
+    }
+    public void delete(UUID id) {
+        Branch branch = get(id);
+        authorization.requireCapability("BRANCH_DELETE", branch.getOrganization().getId(), branch.getId(), null, null);
+        branches.delete(branch);
+    }
 
     private Branch get(UUID id) { return branches.findById(id).orElseThrow(() -> new ResourceNotFoundException("Branch", id)); }
     private Organization requireOrganization(UUID id) { return organizations.findById(id).orElseThrow(() -> new ResourceNotFoundException("Organization", id)); }

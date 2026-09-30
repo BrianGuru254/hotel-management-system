@@ -10,8 +10,10 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "properties", uniqueConstraints = @UniqueConstraint(
-        name = "uq_properties_branch_code", columnNames = {"branch_id", "code"}))
+@Table(name = "properties", uniqueConstraints = {
+        @UniqueConstraint(name = "uq_properties_branch_code", columnNames = {"branch_id", "code"}),
+        @UniqueConstraint(name = "uq_properties_scope", columnNames = {"organization_id", "branch_id", "id"})
+})
 @Getter
 @Setter
 public class Property {

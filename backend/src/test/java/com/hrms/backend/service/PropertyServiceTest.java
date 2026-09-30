@@ -26,6 +26,7 @@ class PropertyServiceTest {
     @Mock PropertyRepository properties;
     @Mock OrganizationRepository organizations;
     @Mock BranchRepository branches;
+    @Mock ScopeAuthorizationService authorization;
     @InjectMocks PropertyService service;
 
     @Test void createsPropertyWithinItsOrganizationsBranch() {
@@ -67,6 +68,8 @@ class PropertyServiceTest {
         Organization branchOrganization = organization(UUID.randomUUID(), "Group B");
         Branch branch = branch(UUID.randomUUID(), branchOrganization);
         Property existing = new Property(); existing.setId(UUID.randomUUID());
+        existing.setOrganization(organization(UUID.randomUUID(), "Existing Group"));
+        existing.setBranch(branch(UUID.randomUUID(), existing.getOrganization()));
         when(properties.findById(existing.getId())).thenReturn(Optional.of(existing));
         when(organizations.findById(requestedOrganization.getId())).thenReturn(Optional.of(requestedOrganization));
         when(branches.findById(branch.getId())).thenReturn(Optional.of(branch));

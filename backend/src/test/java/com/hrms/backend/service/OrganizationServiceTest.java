@@ -17,6 +17,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrganizationServiceTest {
     @Mock OrganizationRepository repository;
+    @Mock ScopeAuthorizationService authorization;
     @InjectMocks OrganizationService service;
 
     @Test void createsOrganizationWithDefaults() {

@@ -1,0 +1,9 @@
+app:
+  security:
+    jwt:
+      secret: test-only-hms-jwt-signing-key-32-bytes-minimum
+      issuer: hotel-management-system-test
+      access-token-ttl-seconds: 900
+      refresh-token-ttl-seconds: 3600
+      cookie-secure: false
+    bootstrap-secret: test-only-one-time-bootstrap-secret
