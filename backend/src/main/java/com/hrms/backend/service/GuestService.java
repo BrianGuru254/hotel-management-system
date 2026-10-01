@@ -10,14 +10,12 @@ import com.hrms.backend.exception.ResourceNotFoundException;
 import com.hrms.backend.repository.GuestRepository;
 import com.hrms.backend.repository.PropertyRepository;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -31,12 +29,14 @@ public class GuestService {
 
     private final GuestRepository guests;
     private final PropertyRepository properties;
+    private final PropertyVisibilityService propertyVisibility;
     private final ScopeAuthorizationService authorization;
 
     public GuestService(GuestRepository guests, PropertyRepository properties,
-                        ScopeAuthorizationService authorization) {
+                        PropertyVisibilityService propertyVisibility, ScopeAuthorizationService authorization) {
         this.guests = guests;
         this.properties = properties;
+        this.propertyVisibility = propertyVisibility;
         this.authorization = authorization;
     }
 
@@ -58,7 +58,7 @@ public class GuestService {
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sort));
 
         ScopeVisibility visibility = authorization.visibility("GUEST_READ");
-        Set<UUID> accessiblePropertyIds = accessiblePropertyIds(visibility, propertyId);
+        Set<UUID> accessiblePropertyIds = propertyVisibility.visiblePropertyIds(visibility, propertyId);
         if (accessiblePropertyIds.isEmpty()) return Page.empty(pageable);
 
         return guests.searchInProperties(accessiblePropertyIds, propertyId,
@@ -111,26 +111,6 @@ public class GuestService {
                 request.addressLine2(), request.city(), request.county(), request.country(), request.dateOfBirth(),
                 request.emergencyContactName(), request.emergencyContactPhone(), request.notes());
         return toResponse(guests.save(guest));
-    }
-
-    private Set<UUID> accessiblePropertyIds(ScopeVisibility visibility, UUID requestedPropertyId) {
-        Set<UUID> ids = new LinkedHashSet<>();
-        if (visibility.systemWide()) {
-            if (requestedPropertyId != null) return Set.of(requestedPropertyId);
-            properties.findAll().forEach(property -> ids.add(property.getId()));
-            return ids;
-        }
-        if (!visibility.organizationIds().isEmpty()) {
-            properties.findByOrganizationIdIn(visibility.organizationIds()).forEach(property -> ids.add(property.getId()));
-        }
-        if (!visibility.branchIds().isEmpty()) {
-            properties.findByBranchIdIn(visibility.branchIds()).forEach(property -> ids.add(property.getId()));
-        }
-        if (!visibility.propertyIds().isEmpty()) {
-            properties.findByIdIn(visibility.propertyIds()).forEach(property -> ids.add(property.getId()));
-        }
-        if (requestedPropertyId != null && !ids.contains(requestedPropertyId)) return Set.of();
-        return ids;
     }
 
     private Guest requireGuest(UUID id) {

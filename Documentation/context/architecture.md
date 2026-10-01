@@ -20,7 +20,7 @@
 
 - `backend/src/main/java/com/hrms/backend/` — Spring Boot application, entities, DTOs, repositories, and future feature packages.
 - `backend/src/main/resources/application.yml` — application, database, JPA, Flyway, server, and actuator configuration. The default database target is the supplied Supabase PostgreSQL endpoint with `sslmode=require`; override `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `DATABASE_SCHEMA` through the environment. Include `currentSchema` in an overridden JDBC URL. Supabase can use an isolated `hms` schema without baselining its pre-existing `public` objects.
-- `backend/src/main/resources/db/migration/` — configured Flyway migration location; V003 adds Properties and ownership constraints, V004 aligns currency columns with `CHAR(3)`, and V005 adds departments, users, roles/capabilities, scoped assignments, bootstrap state, and hashed refresh tokens.
+- `backend/src/main/resources/db/migration/` — configured Flyway migration location; V003 adds Properties and ownership constraints, V004 aligns currency columns with `CHAR(3)`, V005 adds departments/users/roles and authentication foundations, V006 adds property-owned guests, and V007 adds property-owned room types and amenities.
 - `backend/main/resources/db/migration/` — an additional migration-looking directory exists outside the configured runtime path; do not assume Flyway executes it. Resolve duplication deliberately before adding migrations.
 - `Documentation/` — requirements, architecture, API, UX, and implementation plans.
 - Root `src/` — empty at inspection; no frontend architecture is established in source yet.
@@ -36,6 +36,14 @@ Access JWTs are HS256-signed and expire after 15 minutes. They contain user ID, 
 ## Planned System Shape
 
 The project documents a modular monolith with a REST API and a separate management web frontend. The implementation specifications propose Next.js + TypeScript for the frontend and Spring Boot for the API. PostgreSQL is the system of record. Redis, queues, external integrations, and public booking website are future architecture items, not current repository services.
+
+## Guest Data Scope
+
+Guest profiles are property-owned. The guest's property determines its organization and branch, and all guest list/detail/create/update operations require the matching live capability and property scope. Guest numbers and identification numbers are unique within a property; a guest may have separate profiles at different properties.
+
+## Property Catalog Scope
+
+Room types and amenities are also property-owned. Catalog list queries first resolve properties visible through the user's current live ROLE + SCOPE assignments, and detail/create/update/delete operations authorize against the owning property's organization, branch, and property IDs. Room type codes and amenity names are case-insensitively unique within one property. Room inventory and room-to-amenity assignment are separate follow-on work.
 
 ## Invariants
 

@@ -739,6 +739,8 @@ guestNumber
 identificationNumber
 ```
 
+Guest lists are restricted to properties visible to the authenticated user. The endpoint supports page (zero-based, default 0), size (default 20, maximum 100), sort, and direction.
+
 ## Get Guest
 
 ```http
@@ -755,6 +757,7 @@ Request:
 
 ```json
 {
+  "propertyId": "UUID",
   "firstName": "Brian",
   "lastName": "Kiprop",
   "phone": "+254700000000",
@@ -764,6 +767,8 @@ Request:
   "identificationNumber": "12345678"
 }
 ```
+
+Guest profiles are stored separately per property. The server assigns guestNumber; identification numbers must be unique within that property and may be reused at a different property.
 
 ## Update Guest
 
@@ -792,6 +797,8 @@ Loyalty
 
 # 23. ROOM TYPE APIs
 
+Implemented. All requests require authentication and a matching `ROOM_TYPE_*` capability plus an applicable resource scope. A Room Type belongs to one Property; users cannot list or modify records outside properties visible to their assigned scope. Lists are paged (zero-based `page`, default 0; `size`, default 20, maximum 100) and accept `propertyId`, `name`, `code`, and `status` filters.
+
 ## List Room Types
 
 ```http
@@ -814,7 +821,7 @@ Request:
 
 ```json
 {
-  "branchId": "UUID",
+  "propertyId": "UUID",
   "name": "Deluxe",
   "code": "DLX",
   "description": "Deluxe room",
@@ -838,6 +845,8 @@ DELETE /api/v1/room-types/{id}
 ---
 
 # 24. ROOM APIs
+
+Planned for a follow-on module; these endpoints are not implemented yet. Room records will belong to Properties, in line with the Organization → Branch → Property hierarchy.
 
 ## List Rooms
 
@@ -923,16 +932,34 @@ GET /api/v1/rooms/availability?checkInDate=2026-10-01&checkOutDate=2026-10-05
 
 # 25. AMENITY APIs
 
+Implemented as a property-owned catalog. All requests require authentication and a matching `AMENITY_*` capability plus an applicable resource scope. Names are unique without regard to case within a property. Lists are paged (zero-based `page`, default 0; `size`, default 20, maximum 100) and accept `propertyId` and `name` filters.
+
 ## List Amenities
 
 ```http
 GET /api/v1/amenities
 ```
 
+## Get Amenity
+
+```http
+GET /api/v1/amenities/{id}
+```
+
 ## Create Amenity
 
 ```http
 POST /api/v1/amenities
+```
+
+Request:
+
+```json
+{
+  "propertyId": "UUID",
+  "name": "Wi-Fi",
+  "description": "High-speed wireless internet"
+}
 ```
 
 ## Update Amenity
@@ -948,6 +975,8 @@ DELETE /api/v1/amenities/{id}
 ```
 
 ## Assign Amenities
+
+Planned for the Room module; no assignment endpoint is implemented yet.
 
 ```http
 PUT /api/v1/rooms/{id}/amenities

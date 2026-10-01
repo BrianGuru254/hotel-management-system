@@ -194,10 +194,11 @@ erDiagram
     ROLES ||--o{ ROLE_PERMISSIONS : contains
     PERMISSIONS ||--o{ ROLE_PERMISSIONS : grants
 
-    BRANCHES ||--o{ ROOM_TYPES : contains
+    PROPERTIES ||--o{ ROOM_TYPES : contains
     ROOM_TYPES ||--o{ ROOMS : defines
     ROOMS ||--o{ ROOM_AMENITIES : has
     AMENITIES ||--o{ ROOM_AMENITIES : assigned
+    PROPERTIES ||--o{ AMENITIES : provides
 
     GUESTS ||--o{ RESERVATIONS : makes
     ROOM_TYPES ||--o{ RESERVATIONS : requested
@@ -516,7 +517,10 @@ Stores hotel guests and restaurant customers.
 CREATE TABLE guests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    guest_number VARCHAR(50) NOT NULL UNIQUE,
+    property_id UUID NOT NULL
+        REFERENCES properties(id) ON DELETE RESTRICT,
+
+    guest_number VARCHAR(50) NOT NULL,
 
     first_name VARCHAR(100) NOT NULL,
     middle_name VARCHAR(100),
@@ -546,11 +550,17 @@ CREATE TABLE guests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (identification_type, identification_number)
+    UNIQUE (property_id, guest_number),
+    CHECK (
+        (identification_type IS NULL AND identification_number IS NULL)
+        OR (identification_type IS NOT NULL AND identification_number IS NOT NULL)
+    )
 );
 ```
 
 ---
+
+Guest numbers and identification numbers are unique within a property. The implementation uses a case-insensitive partial unique index for identification numbers, allowing the same guest to have a separate profile at another property.
 
 # 15. HOTEL STRUCTURE
 
@@ -578,8 +588,8 @@ BRANCH
 CREATE TABLE room_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    branch_id UUID NOT NULL
-        REFERENCES branches(id),
+    property_id UUID NOT NULL
+        REFERENCES properties(id) ON DELETE RESTRICT,
 
     name VARCHAR(100) NOT NULL,
 
@@ -598,8 +608,20 @@ CREATE TABLE room_types (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (branch_id, code)
+    CHECK (code = UPPER(code)),
+    CHECK (base_price >= 0),
+    CHECK (max_occupancy > 0),
+    CHECK (size_square_meters IS NULL OR size_square_meters > 0),
+    CHECK (status IN ('ACTIVE', 'INACTIVE'))
 );
+```
+
+Room types are property-owned. Their code is unique without regard to letter case within a property. The API normalizes codes to uppercase.
+
+```sql
+CREATE INDEX idx_room_types_property_id ON room_types(property_id);
+CREATE UNIQUE INDEX uq_room_types_property_code_ci
+    ON room_types(property_id, lower(code));
 ```
 
 ---
@@ -653,13 +675,24 @@ OUT_OF_ORDER
 CREATE TABLE amenities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    name VARCHAR(100) NOT NULL UNIQUE,
+    property_id UUID NOT NULL
+        REFERENCES properties(id) ON DELETE RESTRICT,
+
+    name VARCHAR(100) NOT NULL,
 
     description TEXT,
 
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
 );
+
+CREATE INDEX idx_amenities_property_id ON amenities(property_id);
+CREATE UNIQUE INDEX uq_amenities_property_name_ci
+    ON amenities(property_id, lower(name));
 ```
+
+Amenity names are unique without regard to letter case within a property. The migration uses a PostgreSQL functional unique index for this rule.
 
 ---
 

@@ -54,6 +54,8 @@ class BackendApplicationTests {
 	void resetTestData() {
 		jdbc.update("DELETE FROM refresh_tokens");
 		jdbc.update("DELETE FROM users");
+		jdbc.update("DELETE FROM room_types");
+		jdbc.update("DELETE FROM amenities");
 		jdbc.update("DELETE FROM guests");
 		jdbc.update("DELETE FROM departments");
 		jdbc.update("DELETE FROM properties");
@@ -207,6 +209,95 @@ class BackendApplicationTests {
 			.andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/guests").header("Authorization", bearer(propertyUser)).param("size", "101"))
 			.andExpect(status().isBadRequest());
+		mvc.perform(post("/api/v1/guests").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of(
+						"propertyId", propertyA, "firstName", " ", "lastName", "Invalid"))))
+			.andExpect(status().isBadRequest());
+		mvc.perform(post("/api/v1/guests").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of(
+						"propertyId", propertyA, "firstName", "Missing", "lastName", "Identity",
+						"identificationType", "NATIONAL_ID"))))
+			.andExpect(status().isBadRequest());
+		MvcResult updated = mvc.perform(put("/api/v1/guests/" + guestA)
+				.header("Authorization", bearer(propertyUser)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("firstName", "Alicia", "lastName", "Guest"))))
+			.andExpect(status().isOk()).andReturn();
+		assertEquals("Alicia", mapper.readTree(updated.getResponse().getContentAsString()).get("firstName").asText());
+	}
+
+	@Test
+	void roomTypeAndAmenityCatalogsAreCrudManagedAndIsolatedByProperty() throws Exception {
+		String systemToken = bootstrap().accessToken();
+		String organizationA = createOrganization(systemToken, "Catalog Tenant A");
+		String organizationB = createOrganization(systemToken, "Catalog Tenant B");
+		String branchA = createBranch(systemToken, organizationA, "C-A");
+		String branchB = createBranch(systemToken, organizationB, "C-B");
+		String propertyA = createProperty(systemToken, organizationA, branchA, "C-HOTEL-A");
+		String propertyB = createProperty(systemToken, organizationB, branchB, "C-HOTEL-B");
+
+		String roomTypeA = createRoomType(systemToken, propertyA, "Standard", "STD");
+		String roomTypeB = createRoomType(systemToken, propertyB, "Standard", "STD");
+		String amenityA = createAmenity(systemToken, propertyA, "Wi-Fi");
+		String amenityB = createAmenity(systemToken, propertyB, "Wi-Fi");
+
+		createScopedUser(systemToken, "catalogdesk@example.test", "FRONT_DESK", "PROPERTY",
+				organizationA, branchA, propertyA, null);
+		String propertyUser = login("catalogdesk@example.test");
+		String visibleRoomTypes = mvc.perform(get("/api/v1/room-types").header("Authorization", bearer(propertyUser)))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertEquals(1, mapper.readTree(visibleRoomTypes).get("content").size());
+		assertEquals(roomTypeA, mapper.readTree(visibleRoomTypes).get("content").get(0).get("id").asText());
+		String visibleAmenities = mvc.perform(get("/api/v1/amenities").header("Authorization", bearer(propertyUser)))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertEquals(1, mapper.readTree(visibleAmenities).get("content").size());
+		assertEquals(amenityA, mapper.readTree(visibleAmenities).get("content").get(0).get("id").asText());
+		mvc.perform(get("/api/v1/room-types/" + roomTypeB).header("Authorization", bearer(propertyUser)))
+				.andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/amenities/" + amenityB).header("Authorization", bearer(propertyUser)))
+				.andExpect(status().isForbidden());
+		String outsideRoomTypeFilter = mvc.perform(get("/api/v1/room-types").header("Authorization", bearer(propertyUser))
+				.param("propertyId", propertyB)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertEquals(0, mapper.readTree(outsideRoomTypeFilter).get("content").size());
+		String outsideAmenityFilter = mvc.perform(get("/api/v1/amenities").header("Authorization", bearer(propertyUser))
+				.param("propertyId", propertyB)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertEquals(0, mapper.readTree(outsideAmenityFilter).get("content").size());
+		mvc.perform(post("/api/v1/room-types").header("Authorization", bearer(propertyUser)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyB, "name", "Out of Scope", "code", "OUT"))))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/api/v1/amenities").header("Authorization", bearer(propertyUser)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyB, "name", "Out of Scope"))))
+				.andExpect(status().isForbidden());
+
+		mvc.perform(post("/api/v1/room-types").header("Authorization", bearer(systemToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "name", "Duplicate", "code", "std"))))
+				.andExpect(status().isConflict());
+		mvc.perform(post("/api/v1/amenities").header("Authorization", bearer(systemToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "name", "wi-fi"))))
+				.andExpect(status().isConflict());
+		mvc.perform(post("/api/v1/room-types").header("Authorization", bearer(systemToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "name", " ", "code", "BAD"))))
+				.andExpect(status().isBadRequest());
+
+		MvcResult updatedRoomType = mvc.perform(put("/api/v1/room-types/" + roomTypeA).header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Deluxe\",\"code\":\"DLX\",\"basePrice\":125.50,\"maxOccupancy\":2}"))
+				.andExpect(status().isOk()).andReturn();
+		assertEquals("DLX", mapper.readTree(updatedRoomType.getResponse().getContentAsString()).get("code").asText());
+		MvcResult updatedAmenity = mvc.perform(put("/api/v1/amenities/" + amenityA).header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"High-speed Wi-Fi\",\"description\":\"Included\"}"))
+				.andExpect(status().isOk()).andReturn();
+		assertEquals("High-speed Wi-Fi", mapper.readTree(updatedAmenity.getResponse().getContentAsString()).get("name").asText());
+		mvc.perform(get("/api/v1/room-types").header("Authorization", bearer(systemToken)).param("size", "101"))
+				.andExpect(status().isBadRequest());
+		mvc.perform(delete("/api/v1/room-types/" + roomTypeA).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isNoContent());
+		mvc.perform(delete("/api/v1/amenities/" + amenityA).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isNoContent());
+		mvc.perform(get("/api/v1/room-types/" + UUID.randomUUID()).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isNotFound());
+		mvc.perform(get("/api/v1/amenities/" + UUID.randomUUID()).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isNotFound());
 	}
 
 	@Test
@@ -273,6 +364,22 @@ class BackendApplicationTests {
 		request.put("identificationNumber", identificationNumber);
 		MvcResult result = mvc.perform(post("/api/v1/guests").header("Authorization", bearer(token))
 				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(request)))
+			.andExpect(status().isCreated()).andReturn();
+		return mapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+	}
+
+	private String createRoomType(String token, String propertyId, String name, String code) throws Exception {
+		MvcResult result = mvc.perform(post("/api/v1/room-types").header("Authorization", bearer(token))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of(
+						"propertyId", propertyId, "name", name, "code", code, "basePrice", 99.50, "maxOccupancy", 2))))
+			.andExpect(status().isCreated()).andReturn();
+		return mapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+	}
+
+	private String createAmenity(String token, String propertyId, String name) throws Exception {
+		MvcResult result = mvc.perform(post("/api/v1/amenities").header("Authorization", bearer(token))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of(
+						"propertyId", propertyId, "name", name))))
 			.andExpect(status().isCreated()).andReturn();
 		return mapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
 	}

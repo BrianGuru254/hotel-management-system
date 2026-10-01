@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Supabase PostgreSQL connection verified after Organization → Branch → Property and Users/Roles/Authentication.
+Hotel Operations is in progress. Property-scoped Room Type and Amenity catalogs are the current feature on branch `codex/room-type-amenity-catalog`.
 
 ## Current Goal
 
-Connect the backend to Supabase, apply the existing Flyway migrations safely, and verify Hibernate schema validation and protected API startup.
+Continue the backend module sequence with independently reviewable features on separate Git branches. The current step adds property-scoped Room Type and Amenity catalogs with tenant isolation.
 
 ## Completed (Observed)
 
@@ -22,9 +22,16 @@ Connect the backend to Supabase, apply the existing Flyway migrations safely, an
 - Authentication includes one-time SUPER_ADMIN bootstrap, BCrypt password hashing, 15-minute JWTs, HttpOnly/Secure/SameSite=Strict refresh cookies, token rotation, and refresh-family invalidation on replay.
 - User and role APIs support scoped user creation, updates, activation, role-scope assignment management, profile/password endpoints, and role/capability catalog access.
 - Property/department APIs support hierarchy CRUD and prevent cross-organization or out-of-scope access. Department assignments are constrained to the supplied property hierarchy.
+- Guest profiles are owned by one Property. Guest create/list/get/update, filtering, sorting, paging, duplicate checks, and live ROLE + SCOPE authorization are implemented; guests are not shared across properties.
+- Flyway V006 adds property-linked guest storage, a property-local guest number, property-local case-insensitive identity uniqueness, and the guest capabilities for FRONT_DESK, RESERVATIONS_AGENT, and SUPER_ADMIN.
+- Guest integration coverage verifies property isolation, duplicate identity behavior, validation errors, not-found handling, and page-size limits.
+- Room Types are property-owned, with CRUD, active/inactive status, filters, pagination, case-insensitive property-local code uniqueness, and live capability/scope authorization.
+- Amenities are property-owned, with CRUD, filters, pagination, case-insensitive property-local name uniqueness, and live capability/scope authorization. Room-to-amenity assignment waits for the Room module.
+- Flyway V007 adds the property-owned Room Type and Amenity tables, checks, indexes, case-insensitive unique indexes, and initial catalog capabilities. The migration source is present; it has not been applied to the remote database in this session.
+- The catalog integration test checks CRUD, property isolation, cross-tenant denial, duplicate handling, validation, pagination limits, and not-found responses.
 - Flyway validated and applied through V005 against PostgreSQL 17.11. The application started with Hibernate `ddl-auto=validate`; live health returned 200 and an unauthenticated organization request returned 401.
 - Supabase PostgreSQL 17.11 is connected through its IPv4 Session pooler. Flyway applied V001–V005 in the dedicated `hms` schema; Hibernate `ddl-auto=validate` succeeded, `/actuator/health` returned `UP`, and unauthenticated `GET /api/v1/organizations` returned 401. Existing Supabase `public` objects were left untouched; baseline-on-migrate remains disabled.
-- End-to-end H2 PostgreSQL-mode tests cover context loading, hierarchy foreign keys, bootstrap, BCrypt hashing, refresh rotation/reuse, expiry, 19 roles, and organization/branch/property/department scope boundaries. The full Maven suite passed with 19 tests, 0 failures, 0 errors, and 0 skipped.
+- End-to-end H2 PostgreSQL-mode tests cover context loading, hierarchy foreign keys, bootstrap, BCrypt hashing, refresh rotation/reuse, expiry, 19 roles, organization/branch/property/department scope boundaries, property-scoped guests, and property-scoped catalogs. The latest full clean Maven suite passed with 24 tests, 0 failures, 0 errors, and 0 skipped.
 - Requirements, UX, API, architecture, Spring backend, and planned Next.js frontend documentation exist.
 
 ## In Progress / Repository Notes
@@ -33,11 +40,13 @@ Connect the backend to Supabase, apply the existing Flyway migrations safely, an
 - There are migration files in both `backend/src/main/resources/db/migration/` and `backend/main/resources/db/migration/`. Only the former matches the configured Flyway classpath location. Reconcile before relying on both sets.
 - The checkout contains one physical Organization and Branch entity file each, with filenames matching the public classes. Git records the historical lowercase paths; check path casing in a non-Windows checkout before release.
 - The root `src/` directory was empty at inspection. The planned Next.js frontend is not yet available as code.
-- On `codex/supabase-connection`, `application.yml` defaults to the supplied Supabase direct endpoint with SSL; the Windows user environment overrides it with the Session pooler URL, username, password, and `DATABASE_SCHEMA=hms`. Random `HMS_JWT_SECRET` and `HMS_BOOTSTRAP_SECRET` values were also generated locally and saved at user scope. Restart the IDE/terminal to pick up environment changes. Supabase's `public` schema has no app tables or Flyway history but Flyway considers it non-empty, so HMS migrations use the isolated `hms` schema.
+- The earlier Supabase setup used the Session pooler and isolated `hms` schema; V001–V005 were applied and Hibernate validation/startup were verified at that time. Connection and application-secret environment variables are unavailable in the current session, so new migrations and live startup need to be rechecked after those settings are restored. Supabase `public` objects were left untouched.
 
 ## Next Up
 
-1. Await the owner's next instruction. Do not begin reservations, rooms, billing, other operational modules, or frontend.
+1. Re-establish the database and signing-secret environment values in the current host, then apply/verify V006 and V007 against Supabase and confirm Hibernate schema validation and application startup.
+2. Continue Hotel Operations in dependency order: Rooms, Reservations, Stays, then Housekeeping and Maintenance. Add Guest History after its related modules exist.
+3. Proceed through Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services in separate feature branches. Keep the frontend untouched.
 
 ## Open Decisions
 
@@ -50,11 +59,13 @@ Connect the backend to Supabase, apply the existing Flyway migrations safely, an
 - Current backend implementation is Spring Boot + Java 21 + Maven + PostgreSQL + JPA + Flyway.
 - The master plan’s NestJS/Prisma backend text is an older/conflicting proposal; do not use it as the current implementation description.
 - Authorization is ROLE + SCOPE, and a role name alone never authorizes access. SUPER_ADMIN is the only role allowed SYSTEM scope.
-- The owner requested each new feature use a new Git branch. The active branch for Supabase connection configuration is `codex/supabase-connection`.
+- The owner requested each new feature use a new Git branch. Supabase setup remains on codex/supabase-connection; current guest work is on codex/guest-management.
+- Guest Management is on `codex/guest-management`; Room Type and Amenity catalogs are on `codex/room-type-amenity-catalog`.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 
 ## Session Notes
 
 - Context files are stored under `Documentation/context/` and describe the HMS repository rather than the portfolio starter templates.
-- Full `mvn test` passed after the schema configuration change: 19 tests, 0 failures, 0 errors, 0 skipped. Tests use H2 in PostgreSQL mode with Hibernate schema validation enabled. The backend started against Supabase with Flyway at V005, Hibernate `ddl-auto=validate`, health `UP`, and an unauthenticated protected endpoint returning 401. The temporary verification server was stopped after these checks.
+- The original foundation milestone passed 19 tests and verified startup against Supabase through V005. The latest clean Maven test run passes 24 tests; tests use H2 in PostgreSQL mode with Hibernate schema validation enabled.
+- In the current verification session, database connection and application secret environment variables were not available. No Supabase migration or startup was attempted; remote V006/V007 status remains unverified.
