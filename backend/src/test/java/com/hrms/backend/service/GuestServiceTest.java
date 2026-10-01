@@ -27,6 +27,7 @@ import static org.mockito.Mockito.*;
 class GuestServiceTest {
     @Mock GuestRepository guests;
     @Mock PropertyRepository properties;
+    @Mock PropertyVisibilityService propertyVisibility;
     @Mock ScopeAuthorizationService authorization;
     @InjectMocks GuestService service;
 

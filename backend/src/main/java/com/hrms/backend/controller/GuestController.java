@@ -5,7 +5,7 @@ import com.hrms.backend.dto.GuestResponse;
 import com.hrms.backend.dto.GuestUpdateRequest;
 import com.hrms.backend.service.GuestService;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
+import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +21,7 @@ public class GuestController {
     }
 
     @GetMapping
-    public Page<GuestResponse> findAll(
+    public PagedModel<GuestResponse> findAll(
             @RequestParam(required = false) UUID propertyId,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String phone,
@@ -32,8 +32,8 @@ public class GuestController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "lastName") String sort,
             @RequestParam(defaultValue = "asc") String direction) {
-        return service.findAll(propertyId, name, phone, email, guestNumber, identificationNumber,
-                page, size, sort, direction);
+        return new PagedModel<>(service.findAll(propertyId, name, phone, email, guestNumber,
+                identificationNumber, page, size, sort, direction));
     }
 
     @GetMapping("/{id}")

@@ -739,6 +739,8 @@ guestNumber
 identificationNumber
 ```
 
+Guest lists are restricted to properties visible to the authenticated user. The endpoint supports page (zero-based, default 0), size (default 20, maximum 100), sort, and direction.
+
 ## Get Guest
 
 ```http
@@ -755,6 +757,7 @@ Request:
 
 ```json
 {
+  "propertyId": "UUID",
   "firstName": "Brian",
   "lastName": "Kiprop",
   "phone": "+254700000000",
@@ -764,6 +767,8 @@ Request:
   "identificationNumber": "12345678"
 }
 ```
+
+Guest profiles are stored separately per property. The server assigns guestNumber; identification numbers must be unique within that property and may be reused at a different property.
 
 ## Update Guest
 
@@ -792,6 +797,8 @@ Loyalty
 
 # 23. ROOM TYPE APIs
 
+Implemented. All requests require authentication and a matching `ROOM_TYPE_*` capability plus an applicable resource scope. A Room Type belongs to one Property; users cannot list or modify records outside properties visible to their assigned scope. Lists are paged (zero-based `page`, default 0; `size`, default 20, maximum 100) and accept `propertyId`, `name`, `code`, and `status` filters.
+
 ## List Room Types
 
 ```http
@@ -814,7 +821,7 @@ Request:
 
 ```json
 {
-  "branchId": "UUID",
+  "propertyId": "UUID",
   "name": "Deluxe",
   "code": "DLX",
   "description": "Deluxe room",
@@ -839,6 +846,8 @@ DELETE /api/v1/room-types/{id}
 
 # 24. ROOM APIs
 
+Implemented. All requests require authentication and a matching `ROOM_*` capability plus a resource scope. Rooms and their room types must belong to the same Property. Room lists are paged (zero-based `page`, default 0; `size`, default 20, maximum 100) and accept `propertyId`, `roomTypeId`, `roomNumber`, `status`, and `floorNumber` filters.
+
 ## List Rooms
 
 ```http
@@ -848,10 +857,15 @@ GET /api/v1/rooms
 Filters:
 
 ```text
-branchId
+propertyId
 roomTypeId
 status
 floorNumber
+roomNumber
+page
+size
+sort
+direction
 ```
 
 ## Get Room
@@ -870,11 +884,12 @@ Request:
 
 ```json
 {
-  "branchId": "UUID",
+  "propertyId": "UUID",
   "roomTypeId": "UUID",
   "roomNumber": "101",
   "floorNumber": 1,
-  "capacity": 2
+  "capacity": 2,
+  "description": "Corner room"
 }
 ```
 
@@ -885,6 +900,8 @@ PUT /api/v1/rooms/{id}
 ```
 
 ## Change Room Status
+
+Housekeeping scopes may set `DIRTY` or `CLEANING`, and may return a dirty/cleaning room to `AVAILABLE`. Maintenance scopes may set `MAINTENANCE` or `OUT_OF_ORDER` and return those rooms to `AVAILABLE`. Broader room-management capabilities may set any defined status. A reason is required for `MAINTENANCE` and `OUT_OF_ORDER`.
 
 ```http
 PATCH /api/v1/rooms/{id}/status
@@ -899,7 +916,31 @@ Request:
 }
 ```
 
+## Delete Room
+
+```http
+DELETE /api/v1/rooms/{id}
+```
+
+Rooms in `RESERVED` or `OCCUPIED` status cannot be edited or deleted.
+
+## Assign Amenities
+
+Replaces the room's complete amenity set. Every amenity must belong to the same property as the room. An empty `amenityIds` array clears assignments.
+
+```http
+PUT /api/v1/rooms/{id}/amenities
+```
+
+```json
+{
+  "amenityIds": ["UUID", "UUID"]
+}
+```
+
 ## Room Availability
+
+Reservation-aware availability is deferred to the Reservations module.
 
 ```http
 GET /api/v1/rooms/availability
@@ -923,16 +964,34 @@ GET /api/v1/rooms/availability?checkInDate=2026-10-01&checkOutDate=2026-10-05
 
 # 25. AMENITY APIs
 
+Implemented as a property-owned catalog. All requests require authentication and a matching `AMENITY_*` capability plus an applicable resource scope. Names are unique without regard to case within a property. Lists are paged (zero-based `page`, default 0; `size`, default 20, maximum 100) and accept `propertyId` and `name` filters.
+
 ## List Amenities
 
 ```http
 GET /api/v1/amenities
 ```
 
+## Get Amenity
+
+```http
+GET /api/v1/amenities/{id}
+```
+
 ## Create Amenity
 
 ```http
 POST /api/v1/amenities
+```
+
+Request:
+
+```json
+{
+  "propertyId": "UUID",
+  "name": "Wi-Fi",
+  "description": "High-speed wireless internet"
+}
 ```
 
 ## Update Amenity
@@ -949,20 +1008,7 @@ DELETE /api/v1/amenities/{id}
 
 ## Assign Amenities
 
-```http
-PUT /api/v1/rooms/{id}/amenities
-```
-
-Request:
-
-```json
-{
-  "amenityIds": [
-    "UUID",
-    "UUID"
-  ]
-}
-```
+Room amenity assignment is provided by `PUT /api/v1/rooms/{id}/amenities` in the Room API. The service and database enforce same-property ownership.
 
 ---
 

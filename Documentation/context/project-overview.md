@@ -28,6 +28,8 @@ Hotel and restaurant administrators/managers, front-office and reception staff, 
 
 ## Current Scope and Status
 
+Property-scoped Guest Management, Room Type and Amenity catalogs, and Room inventory/status management are implemented hotel-operations slices. Reservation-aware availability and other operational modules remain planned until implemented and verified.
+
 The backend includes Organization, Branch, Property, Department, User, Role, and scoped authorization foundations. Authentication uses short-lived JWT access tokens, BCrypt passwords, and rotated refresh tokens stored as hashes. Protected API services enforce tenant boundaries server-side. No frontend source files were present in the root `src/` folder when inspected; reservations and other operational modules remain planned until implemented and verified.
 
 ## Source-of-Truth Notes
