@@ -3,8 +3,8 @@ spring:
     name: hrms
 
   datasource:
-    url: jdbc:postgresql://127.0.0.1:5432/hrms
-    username: hrms
+    url: "${DATABASE_URL:jdbc:postgresql://db.wbiznfwaazzcdjsluvvp.supabase.co:5432/postgres?sslmode=require&currentSchema=${DATABASE_SCHEMA:public}}"
+    username: "${DATABASE_USERNAME:postgres}"
     password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
@@ -12,10 +12,16 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate:
+        default_schema: ${DATABASE_SCHEMA:public}
 
   flyway:
     enabled: true
     locations: classpath:db/migration
+    default-schema: ${DATABASE_SCHEMA:public}
+    schemas:
+      - ${DATABASE_SCHEMA:public}
     validate-on-migrate: true
 
 server:

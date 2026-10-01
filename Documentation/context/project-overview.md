@@ -14,7 +14,7 @@ Hotel & Restaurant Management System (HRMS), a hospitality operations platform i
 
 ## Intended Users
 
-Hotel and restaurant administrators/managers, front-office and reception staff, housekeeping and maintenance teams, restaurant and kitchen staff, cashiers, storekeepers, procurement staff, and finance staff. These are target roles from the UX requirements; role-based access is not yet implemented in the inspected code.
+Hotel and restaurant administrators/managers, front-office and reception staff, housekeeping and maintenance teams, restaurant and kitchen staff, cashiers, storekeepers, procurement staff, and finance staff. The initial role catalog and scoped backend authorization are implemented; operational modules for those roles are still pending.
 
 ## Product Areas
 
@@ -28,7 +28,7 @@ Hotel and restaurant administrators/managers, front-office and reception staff, 
 
 ## Current Scope and Status
 
-The current codebase is an early backend foundation. The backend now includes Organization, Branch, and Property entities, DTOs, repositories, services, REST controllers, validation, and exception handling. Property ownership is checked by the service and enforced by a composite foreign key. No frontend source files were present in the root `src/` folder when inspected. Authentication, reservations, and other operational modules remain planned unless their implementation is added and verified.
+The backend includes Organization, Branch, Property, Department, User, Role, and scoped authorization foundations. Authentication uses short-lived JWT access tokens, BCrypt passwords, and rotated refresh tokens stored as hashes. Protected API services enforce tenant boundaries server-side. No frontend source files were present in the root `src/` folder when inspected; reservations and other operational modules remain planned until implemented and verified.
 
 ## Source-of-Truth Notes
 
