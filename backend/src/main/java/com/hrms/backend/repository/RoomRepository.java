@@ -10,8 +10,11 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.UUID;
+import com.hrms.backend.entity.RoomStatus;
 
 public interface RoomRepository extends JpaRepository<Room, UUID> {
+    long countByPropertyIdAndRoomTypeIdAndCurrentStatus(UUID propertyId, UUID roomTypeId, RoomStatus currentStatus);
+
     @Query(value = """
             select room from Room room
             where room.property.id in :propertyIds
