@@ -56,6 +56,16 @@ public class ScopeAuthorizationService {
     }
 
     @Transactional(readOnly = true)
+    public boolean hasCapabilityForResource(String capability, UUID organizationId, UUID branchId,
+                                            UUID propertyId, UUID departmentId) {
+        UUID userId = currentUserId();
+        requireActiveUser(userId);
+        return assignments.findByUserId(userId).stream()
+                .filter(grant -> hasCapability(grant, capability))
+                .anyMatch(grant -> allows(grant, organizationId, branchId, propertyId, departmentId, null));
+    }
+
+    @Transactional(readOnly = true)
     public void requireSelfCapability(String capability) {
         UUID userId = currentUserId();
         requireActiveUser(userId);

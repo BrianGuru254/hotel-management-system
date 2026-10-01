@@ -53,7 +53,8 @@ CREATE TABLE room_types (
  CONSTRAINT ck_room_types_base_price CHECK (base_price >= 0),
  CONSTRAINT ck_room_types_max_occupancy CHECK (max_occupancy > 0),
  CONSTRAINT ck_room_types_size CHECK (size_square_meters IS NULL OR size_square_meters > 0),
- CONSTRAINT ck_room_types_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
+ CONSTRAINT ck_room_types_status CHECK (status IN ('ACTIVE', 'INACTIVE')),
+ CONSTRAINT uq_room_types_property_id_id UNIQUE (property_id, id)
 );
 CREATE INDEX idx_room_types_property_id ON room_types(property_id);
 CREATE UNIQUE INDEX uq_room_types_property_code_ci ON room_types(property_id, code);
@@ -61,10 +62,40 @@ CREATE UNIQUE INDEX uq_room_types_property_code_ci ON room_types(property_id, co
 CREATE TABLE amenities (
  id UUID PRIMARY KEY, property_id UUID NOT NULL, name VARCHAR(100) NOT NULL, description TEXT,
  created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
- CONSTRAINT fk_amenities_property FOREIGN KEY (property_id) REFERENCES properties(id)
+ CONSTRAINT fk_amenities_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT uq_amenities_property_id_id UNIQUE (property_id, id)
 );
 CREATE INDEX idx_amenities_property_id ON amenities(property_id);
 CREATE UNIQUE INDEX uq_amenities_property_name_ci ON amenities(property_id, name);
+
+CREATE TABLE rooms (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, room_type_id UUID NOT NULL,
+ room_number VARCHAR(30) NOT NULL, floor_number INTEGER, capacity INTEGER NOT NULL DEFAULT 1,
+ current_status VARCHAR(30) NOT NULL DEFAULT 'AVAILABLE', status_reason VARCHAR(500),
+ status_changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ description TEXT, created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_rooms_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_rooms_room_type FOREIGN KEY (room_type_id) REFERENCES room_types(id),
+ CONSTRAINT fk_rooms_room_type_scope FOREIGN KEY (property_id, room_type_id) REFERENCES room_types(property_id, id),
+ CONSTRAINT uq_rooms_property_scope UNIQUE (property_id, id),
+ CONSTRAINT ck_rooms_number_upper CHECK (room_number = UPPER(room_number)),
+ CONSTRAINT ck_rooms_capacity CHECK (capacity > 0),
+ CONSTRAINT ck_rooms_status CHECK (current_status IN ('AVAILABLE', 'RESERVED', 'OCCUPIED', 'DIRTY', 'CLEANING', 'MAINTENANCE', 'OUT_OF_ORDER'))
+);
+CREATE INDEX idx_rooms_property_id ON rooms(property_id);
+CREATE INDEX idx_rooms_property_status ON rooms(property_id, current_status);
+CREATE INDEX idx_rooms_room_type_id ON rooms(room_type_id);
+CREATE UNIQUE INDEX uq_rooms_property_room_number_ci ON rooms(property_id, room_number);
+
+CREATE TABLE room_amenities (
+ property_id UUID NOT NULL, room_id UUID NOT NULL, amenity_id UUID NOT NULL,
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT pk_room_amenities PRIMARY KEY (room_id, amenity_id),
+ CONSTRAINT fk_room_amenities_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id) ON DELETE CASCADE,
+ CONSTRAINT fk_room_amenities_amenity_scope FOREIGN KEY (property_id, amenity_id) REFERENCES amenities(property_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_room_amenities_property_id ON room_amenities(property_id);
+CREATE INDEX idx_room_amenities_amenity_id ON room_amenities(amenity_id);
 
 CREATE TABLE departments (
  id UUID PRIMARY KEY, organization_id UUID NOT NULL, branch_id UUID NOT NULL, property_id UUID NOT NULL,
@@ -158,6 +189,9 @@ INSERT INTO capabilities(capability_key, description) VALUES
  ('GUEST_READ','Read guest records'), ('GUEST_CREATE','Create guest records'), ('GUEST_UPDATE','Update guest records'),
  ('ROOM_TYPE_READ','Read room type catalogs'), ('ROOM_TYPE_CREATE','Create room types'), ('ROOM_TYPE_UPDATE','Update room types'), ('ROOM_TYPE_DELETE','Delete room types'),
  ('AMENITY_READ','Read property amenities'), ('AMENITY_CREATE','Create property amenities'), ('AMENITY_UPDATE','Update property amenities'), ('AMENITY_DELETE','Delete property amenities'),
+ ('ROOM_READ','Read rooms'), ('ROOM_CREATE','Create rooms'), ('ROOM_UPDATE','Update rooms'), ('ROOM_DELETE','Delete rooms'),
+ ('ROOM_STATUS_UPDATE','Update room status'), ('ROOM_HOUSEKEEPING_STATUS_UPDATE','Update room status for housekeeping work'),
+ ('ROOM_MAINTENANCE_STATUS_UPDATE','Update room status for maintenance work'), ('ROOM_AMENITY_UPDATE','Assign amenities to rooms'),
  ('DEPARTMENT_READ','Read departments'), ('DEPARTMENT_CREATE','Create departments'), ('DEPARTMENT_UPDATE','Update departments'), ('DEPARTMENT_DELETE','Delete departments'),
  ('USER_MANAGE','Manage users'), ('ROLE_READ','Read roles'), ('PROFILE_READ','Read profile'), ('PROFILE_UPDATE','Update profile'), ('PASSWORD_CHANGE','Change password'),
  ('REPORT_READ','Read reports'), ('AUDIT_READ','Read audit records'), ('SECURITY_MANAGE','Manage security');
@@ -184,3 +218,12 @@ INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('FRONT_DESK','ROOM_TYPE_READ'),('FRONT_DESK','AMENITY_READ'),
  ('RESERVATIONS_AGENT','ROOM_TYPE_READ'),('RESERVATIONS_AGENT','AMENITY_READ'),
  ('REPORTING_USER','ROOM_TYPE_READ'),('REPORTING_USER','AMENITY_READ');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('ORGANIZATION_ADMIN','ROOM_READ'),('ORGANIZATION_ADMIN','ROOM_CREATE'),('ORGANIZATION_ADMIN','ROOM_UPDATE'),('ORGANIZATION_ADMIN','ROOM_DELETE'),('ORGANIZATION_ADMIN','ROOM_STATUS_UPDATE'),('ORGANIZATION_ADMIN','ROOM_AMENITY_UPDATE'),
+ ('BRANCH_MANAGER','ROOM_READ'),('BRANCH_MANAGER','ROOM_CREATE'),('BRANCH_MANAGER','ROOM_UPDATE'),('BRANCH_MANAGER','ROOM_DELETE'),('BRANCH_MANAGER','ROOM_STATUS_UPDATE'),('BRANCH_MANAGER','ROOM_AMENITY_UPDATE'),
+ ('PROPERTY_MANAGER','ROOM_READ'),('PROPERTY_MANAGER','ROOM_CREATE'),('PROPERTY_MANAGER','ROOM_UPDATE'),('PROPERTY_MANAGER','ROOM_DELETE'),('PROPERTY_MANAGER','ROOM_STATUS_UPDATE'),('PROPERTY_MANAGER','ROOM_AMENITY_UPDATE'),
+ ('FRONT_DESK','ROOM_READ'),('RESERVATIONS_AGENT','ROOM_READ'),('REPORTING_USER','ROOM_READ'),
+ ('HOUSEKEEPING_MANAGER','ROOM_READ'),('HOUSEKEEPING_MANAGER','ROOM_HOUSEKEEPING_STATUS_UPDATE'),
+ ('HOUSEKEEPING_STAFF','ROOM_READ'),('HOUSEKEEPING_STAFF','ROOM_HOUSEKEEPING_STATUS_UPDATE'),
+ ('MAINTENANCE_MANAGER','ROOM_READ'),('MAINTENANCE_MANAGER','ROOM_MAINTENANCE_STATUS_UPDATE'),
+ ('MAINTENANCE_STAFF','ROOM_READ'),('MAINTENANCE_STAFF','ROOM_MAINTENANCE_STATUS_UPDATE');

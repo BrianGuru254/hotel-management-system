@@ -846,7 +846,7 @@ DELETE /api/v1/room-types/{id}
 
 # 24. ROOM APIs
 
-Planned for a follow-on module; these endpoints are not implemented yet. Room records will belong to Properties, in line with the Organization → Branch → Property hierarchy.
+Implemented. All requests require authentication and a matching `ROOM_*` capability plus a resource scope. Rooms and their room types must belong to the same Property. Room lists are paged (zero-based `page`, default 0; `size`, default 20, maximum 100) and accept `propertyId`, `roomTypeId`, `roomNumber`, `status`, and `floorNumber` filters.
 
 ## List Rooms
 
@@ -857,10 +857,15 @@ GET /api/v1/rooms
 Filters:
 
 ```text
-branchId
+propertyId
 roomTypeId
 status
 floorNumber
+roomNumber
+page
+size
+sort
+direction
 ```
 
 ## Get Room
@@ -879,11 +884,12 @@ Request:
 
 ```json
 {
-  "branchId": "UUID",
+  "propertyId": "UUID",
   "roomTypeId": "UUID",
   "roomNumber": "101",
   "floorNumber": 1,
-  "capacity": 2
+  "capacity": 2,
+  "description": "Corner room"
 }
 ```
 
@@ -894,6 +900,8 @@ PUT /api/v1/rooms/{id}
 ```
 
 ## Change Room Status
+
+Housekeeping scopes may set `DIRTY` or `CLEANING`, and may return a dirty/cleaning room to `AVAILABLE`. Maintenance scopes may set `MAINTENANCE` or `OUT_OF_ORDER` and return those rooms to `AVAILABLE`. Broader room-management capabilities may set any defined status. A reason is required for `MAINTENANCE` and `OUT_OF_ORDER`.
 
 ```http
 PATCH /api/v1/rooms/{id}/status
@@ -908,7 +916,31 @@ Request:
 }
 ```
 
+## Delete Room
+
+```http
+DELETE /api/v1/rooms/{id}
+```
+
+Rooms in `RESERVED` or `OCCUPIED` status cannot be edited or deleted.
+
+## Assign Amenities
+
+Replaces the room's complete amenity set. Every amenity must belong to the same property as the room. An empty `amenityIds` array clears assignments.
+
+```http
+PUT /api/v1/rooms/{id}/amenities
+```
+
+```json
+{
+  "amenityIds": ["UUID", "UUID"]
+}
+```
+
 ## Room Availability
+
+Reservation-aware availability is deferred to the Reservations module.
 
 ```http
 GET /api/v1/rooms/availability
@@ -976,22 +1008,7 @@ DELETE /api/v1/amenities/{id}
 
 ## Assign Amenities
 
-Planned for the Room module; no assignment endpoint is implemented yet.
-
-```http
-PUT /api/v1/rooms/{id}/amenities
-```
-
-Request:
-
-```json
-{
-  "amenityIds": [
-    "UUID",
-    "UUID"
-  ]
-}
-```
+Room amenity assignment is provided by `PUT /api/v1/rooms/{id}/amenities` in the Room API. The service and database enforce same-property ownership.
 
 ---
 

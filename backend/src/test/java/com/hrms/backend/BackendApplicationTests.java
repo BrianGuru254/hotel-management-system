@@ -54,6 +54,8 @@ class BackendApplicationTests {
 	void resetTestData() {
 		jdbc.update("DELETE FROM refresh_tokens");
 		jdbc.update("DELETE FROM users");
+		jdbc.update("DELETE FROM room_amenities");
+		jdbc.update("DELETE FROM rooms");
 		jdbc.update("DELETE FROM room_types");
 		jdbc.update("DELETE FROM amenities");
 		jdbc.update("DELETE FROM guests");
@@ -301,6 +303,123 @@ class BackendApplicationTests {
 	}
 
 	@Test
+	void roomsEnforcePropertyHierarchyScopesStatusRulesAndAmenityOwnership() throws Exception {
+		String systemToken = bootstrap().accessToken();
+		String organizationA = createOrganization(systemToken, "Room Tenant A");
+		String organizationB = createOrganization(systemToken, "Room Tenant B");
+		String branchA = createBranch(systemToken, organizationA, "R-A");
+		String branchB = createBranch(systemToken, organizationB, "R-B");
+		String propertyA = createProperty(systemToken, organizationA, branchA, "R-HOTEL-A");
+		String propertyB = createProperty(systemToken, organizationB, branchB, "R-HOTEL-B");
+		String typeA = createRoomType(systemToken, propertyA, "Standard", "STD");
+		String typeB = createRoomType(systemToken, propertyB, "Standard", "STD");
+		String amenityA = createAmenity(systemToken, propertyA, "Wi-Fi");
+		String amenityB = createAmenity(systemToken, propertyB, "Wi-Fi");
+		String roomA = createRoom(systemToken, propertyA, typeA, "101A", 2);
+		String roomB = createRoom(systemToken, propertyB, typeB, "101A", 2);
+
+		mvc.perform(post("/api/v1/rooms").header("Authorization", bearer(systemToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "roomTypeId", typeB,
+						"roomNumber", "201", "capacity", 2))))
+				.andExpect(status().isUnprocessableEntity());
+		mvc.perform(post("/api/v1/rooms").header("Authorization", bearer(systemToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "roomTypeId", typeA,
+						"roomNumber", "101a", "capacity", 2))))
+				.andExpect(status().isConflict());
+		mvc.perform(post("/api/v1/rooms").header("Authorization", bearer(systemToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "roomTypeId", typeA,
+						"roomNumber", "201", "capacity", 3))))
+				.andExpect(status().isUnprocessableEntity());
+
+		mvc.perform(put("/api/v1/rooms/" + roomA + "/amenities").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("amenityIds", List.of(amenityA)))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.amenityIds[0]").value(amenityA));
+		mvc.perform(put("/api/v1/rooms/" + roomA + "/amenities").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("amenityIds", List.of(amenityB)))))
+				.andExpect(status().isUnprocessableEntity());
+		mvc.perform(put("/api/v1/rooms/" + roomA + "/amenities").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("amenityIds", List.of(amenityA, amenityA)))))
+				.andExpect(status().isBadRequest());
+
+		createScopedUser(systemToken, "roomdesk@example.test", "FRONT_DESK", "PROPERTY",
+				organizationA, branchA, propertyA, null);
+		String frontDesk = login("roomdesk@example.test");
+		String visibleRooms = mvc.perform(get("/api/v1/rooms").header("Authorization", bearer(frontDesk)))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertEquals(1, mapper.readTree(visibleRooms).get("content").size());
+		assertEquals(roomA, mapper.readTree(visibleRooms).get("content").get(0).get("id").asText());
+		mvc.perform(get("/api/v1/rooms/" + roomA).header("Authorization", bearer(frontDesk))).andExpect(status().isOk());
+		mvc.perform(get("/api/v1/rooms/" + roomB).header("Authorization", bearer(frontDesk))).andExpect(status().isForbidden());
+		String outsidePropertyRooms = mvc.perform(get("/api/v1/rooms").header("Authorization", bearer(frontDesk))
+				.param("propertyId", propertyB)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertEquals(0, mapper.readTree(outsidePropertyRooms).get("content").size());
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(frontDesk))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DIRTY\"}"))
+				.andExpect(status().isForbidden());
+
+		createScopedUser(systemToken, "housekeeper@example.test", "HOUSEKEEPING_STAFF", "PROPERTY",
+				organizationA, branchA, propertyA, null);
+		String housekeeper = login("housekeeper@example.test");
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(housekeeper))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DIRTY\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.currentStatus").value("DIRTY"));
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(housekeeper))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"AVAILABLE\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.currentStatus").value("AVAILABLE"));
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(housekeeper))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"MAINTENANCE\",\"reason\":\"repair\"}"))
+				.andExpect(status().isForbidden());
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"OCCUPIED\"}"))
+				.andExpect(status().isOk());
+		mvc.perform(put("/api/v1/rooms/" + roomA).header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of(
+						"roomTypeId", typeA, "roomNumber", "109", "capacity", 2))))
+				.andExpect(status().isUnprocessableEntity());
+		mvc.perform(delete("/api/v1/rooms/" + roomA).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isUnprocessableEntity());
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(housekeeper))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DIRTY\"}"))
+				.andExpect(status().isUnprocessableEntity());
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"AVAILABLE\"}"))
+				.andExpect(status().isOk());
+
+		createScopedUser(systemToken, "maintenance@example.test", "MAINTENANCE_STAFF", "PROPERTY",
+				organizationA, branchA, propertyA, null);
+		String maintenance = login("maintenance@example.test");
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(maintenance))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"MAINTENANCE\",\"reason\":\"repairs\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.currentStatus").value("MAINTENANCE"));
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(maintenance))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"AVAILABLE\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.currentStatus").value("AVAILABLE"));
+
+		MvcResult updatedRoom = mvc.perform(put("/api/v1/rooms/" + roomA).header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of(
+						"roomTypeId", typeA, "roomNumber", "102", "floorNumber", 2, "capacity", 1, "description", "Corner room"))))
+				.andExpect(status().isOk()).andReturn();
+		assertEquals("102", mapper.readTree(updatedRoom.getResponse().getContentAsString()).get("roomNumber").asText());
+		assertEquals(1, mapper.readTree(updatedRoom.getResponse().getContentAsString()).get("amenityIds").size());
+		mvc.perform(get("/api/v1/rooms").header("Authorization", bearer(systemToken)).param("status", "AVAILABLE")
+				.param("roomTypeId", typeA).param("propertyId", propertyA))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.content.length()").value(1));
+		mvc.perform(get("/api/v1/rooms").header("Authorization", bearer(systemToken)).param("size", "101"))
+				.andExpect(status().isBadRequest());
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"MAINTENANCE\"}"))
+				.andExpect(status().isBadRequest());
+		mvc.perform(patch("/api/v1/rooms/" + roomA + "/status").header("Authorization", bearer(systemToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"MAINTENANCE\",\"reason\":\"Air conditioning repair\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.statusReason").value("Air conditioning repair"));
+		mvc.perform(delete("/api/v1/rooms/" + roomA).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isNoContent());
+		assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM room_amenities WHERE room_id = ?", Integer.class, UUID.fromString(roomA)));
+		mvc.perform(get("/api/v1/rooms/" + UUID.randomUUID()).header("Authorization", bearer(systemToken)))
+				.andExpect(status().isNotFound());
+	}
+
+	@Test
 	void rejectsUnauthenticatedAndExpiredAccessTokens() throws Exception {
 		mvc.perform(get("/api/v1/organizations")).andExpect(status().isUnauthorized());
 		String accessToken = bootstrap().accessToken();
@@ -380,6 +499,14 @@ class BackendApplicationTests {
 		MvcResult result = mvc.perform(post("/api/v1/amenities").header("Authorization", bearer(token))
 				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of(
 						"propertyId", propertyId, "name", name))))
+			.andExpect(status().isCreated()).andReturn();
+		return mapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+	}
+
+	private String createRoom(String token, String propertyId, String roomTypeId, String roomNumber, int capacity) throws Exception {
+		MvcResult result = mvc.perform(post("/api/v1/rooms").header("Authorization", bearer(token))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of(
+						"propertyId", propertyId, "roomTypeId", roomTypeId, "roomNumber", roomNumber, "capacity", capacity))))
 			.andExpect(status().isCreated()).andReturn();
 		return mapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
 	}

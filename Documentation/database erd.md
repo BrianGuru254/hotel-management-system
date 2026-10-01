@@ -612,7 +612,8 @@ CREATE TABLE room_types (
     CHECK (base_price >= 0),
     CHECK (max_occupancy > 0),
     CHECK (size_square_meters IS NULL OR size_square_meters > 0),
-    CHECK (status IN ('ACTIVE', 'INACTIVE'))
+    CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    UNIQUE (property_id, id)
 );
 ```
 
@@ -632,11 +633,11 @@ CREATE UNIQUE INDEX uq_room_types_property_code_ci
 CREATE TABLE rooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    branch_id UUID NOT NULL
-        REFERENCES branches(id),
+    property_id UUID NOT NULL
+        REFERENCES properties(id) ON DELETE RESTRICT,
 
     room_type_id UUID NOT NULL
-        REFERENCES room_types(id),
+        REFERENCES room_types(id) ON DELETE RESTRICT,
 
     room_number VARCHAR(30) NOT NULL,
 
@@ -646,13 +647,30 @@ CREATE TABLE rooms (
 
     current_status VARCHAR(30) NOT NULL DEFAULT 'AVAILABLE',
 
+    status_reason VARCHAR(500),
+
+    status_changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
     description TEXT,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (branch_id, room_number)
+    UNIQUE (property_id, id),
+    FOREIGN KEY (property_id, room_type_id)
+        REFERENCES room_types(property_id, id) ON DELETE RESTRICT,
+    FOREIGN KEY (room_type_id)
+        REFERENCES room_types(id) ON DELETE RESTRICT,
+    CHECK (room_number = UPPER(room_number)),
+    CHECK (capacity > 0),
+    CHECK (current_status IN ('AVAILABLE', 'RESERVED', 'OCCUPIED', 'DIRTY', 'CLEANING', 'MAINTENANCE', 'OUT_OF_ORDER'))
 );
+
+CREATE INDEX idx_rooms_property_id ON rooms(property_id);
+CREATE INDEX idx_rooms_property_status ON rooms(property_id, current_status);
+CREATE INDEX idx_rooms_room_type_id ON rooms(room_type_id);
+CREATE UNIQUE INDEX uq_rooms_property_room_number_ci
+    ON rooms(property_id, lower(room_number));
 ```
 
 Room statuses:
@@ -684,7 +702,7 @@ CREATE TABLE amenities (
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
+    UNIQUE (property_id, id)
 );
 
 CREATE INDEX idx_amenities_property_id ON amenities(property_id);
@@ -700,17 +718,23 @@ Amenity names are unique without regard to letter case within a property. The mi
 
 ```sql
 CREATE TABLE room_amenities (
-    room_id UUID NOT NULL
-        REFERENCES rooms(id)
-        ON DELETE CASCADE,
+    property_id UUID NOT NULL,
 
-    amenity_id UUID NOT NULL
-        REFERENCES amenities(id)
-        ON DELETE CASCADE,
+    room_id UUID NOT NULL,
 
-    PRIMARY KEY (room_id, amenity_id)
+    amenity_id UUID NOT NULL,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (room_id, amenity_id),
+    FOREIGN KEY (property_id, room_id)
+        REFERENCES rooms(property_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (property_id, amenity_id)
+        REFERENCES amenities(property_id, id) ON DELETE CASCADE
 );
 ```
+
+The shared `property_id` in the room-amenity join constraints prevents linking an amenity from another property.
 
 ---
 

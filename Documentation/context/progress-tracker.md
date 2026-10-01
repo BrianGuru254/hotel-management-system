@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Hotel Operations is in progress. Property-scoped Room Type and Amenity catalogs are the current feature on branch `codex/room-type-amenity-catalog`.
+Hotel Operations is in progress. The Room inventory module is the current feature on branch `codex/rooms`.
 
 ## Current Goal
 
-Continue the backend module sequence with independently reviewable features on separate Git branches. The current step adds property-scoped Room Type and Amenity catalogs with tenant isolation.
+Continue the backend module sequence with independently reviewable features on separate Git branches. The current step adds property-owned Room inventory and same-property Room Type/Amenity relationships.
 
 ## Completed (Observed)
 
@@ -26,12 +26,15 @@ Continue the backend module sequence with independently reviewable features on s
 - Flyway V006 adds property-linked guest storage, a property-local guest number, property-local case-insensitive identity uniqueness, and the guest capabilities for FRONT_DESK, RESERVATIONS_AGENT, and SUPER_ADMIN.
 - Guest integration coverage verifies property isolation, duplicate identity behavior, validation errors, not-found handling, and page-size limits.
 - Room Types are property-owned, with CRUD, active/inactive status, filters, pagination, case-insensitive property-local code uniqueness, and live capability/scope authorization.
-- Amenities are property-owned, with CRUD, filters, pagination, case-insensitive property-local name uniqueness, and live capability/scope authorization. Room-to-amenity assignment waits for the Room module.
+- Amenities are property-owned, with CRUD, filters, pagination, case-insensitive property-local name uniqueness, and live capability/scope authorization. Room-to-amenity assignment is implemented in V008.
 - Flyway V007 adds the property-owned Room Type and Amenity tables, checks, indexes, case-insensitive unique indexes, and initial catalog capabilities. The migration source is present; it has not been applied to the remote database in this session.
 - The catalog integration test checks CRUD, property isolation, cross-tenant denial, duplicate handling, validation, pagination limits, and not-found responses.
+- Rooms are property-owned, reference active Room Types from the same property, enforce property-local case-insensitive room-number uniqueness, and support filters, pagination, CRUD, status changes, and amenity assignment.
+- Housekeeping and maintenance status changes use dedicated capabilities and limited status groups. Room and room-amenity property consistency is also constrained by composite database foreign keys.
+- Flyway V008 adds Rooms, composite scope constraints, the property-scoped room-amenity join, indexes, and initial room capabilities. The migration source is present; it has not been applied to the remote database in this session.
 - Flyway validated and applied through V005 against PostgreSQL 17.11. The application started with Hibernate `ddl-auto=validate`; live health returned 200 and an unauthenticated organization request returned 401.
 - Supabase PostgreSQL 17.11 is connected through its IPv4 Session pooler. Flyway applied V001–V005 in the dedicated `hms` schema; Hibernate `ddl-auto=validate` succeeded, `/actuator/health` returned `UP`, and unauthenticated `GET /api/v1/organizations` returned 401. Existing Supabase `public` objects were left untouched; baseline-on-migrate remains disabled.
-- End-to-end H2 PostgreSQL-mode tests cover context loading, hierarchy foreign keys, bootstrap, BCrypt hashing, refresh rotation/reuse, expiry, 19 roles, organization/branch/property/department scope boundaries, property-scoped guests, and property-scoped catalogs. The latest full clean Maven suite passed with 24 tests, 0 failures, 0 errors, and 0 skipped.
+- End-to-end H2 PostgreSQL-mode tests cover context loading, hierarchy foreign keys, bootstrap, BCrypt hashing, refresh rotation/reuse, expiry, 19 roles, organization/branch/property/department scope boundaries, property-scoped guests/catalogs, and Room operations. The latest full clean Maven suite passed with 25 tests, 0 failures, 0 errors, and 0 skipped.
 - Requirements, UX, API, architecture, Spring backend, and planned Next.js frontend documentation exist.
 
 ## In Progress / Repository Notes
@@ -44,8 +47,8 @@ Continue the backend module sequence with independently reviewable features on s
 
 ## Next Up
 
-1. Re-establish the database and signing-secret environment values in the current host, then apply/verify V006 and V007 against Supabase and confirm Hibernate schema validation and application startup.
-2. Continue Hotel Operations in dependency order: Rooms, Reservations, Stays, then Housekeeping and Maintenance. Add Guest History after its related modules exist.
+1. Re-establish the database and signing-secret environment values in the current host, then apply/verify V006–V008 against Supabase and confirm Hibernate schema validation and application startup.
+2. Continue Hotel Operations in dependency order: Reservations, Stays, then Housekeeping and Maintenance. Add Guest History after its related modules exist.
 3. Proceed through Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services in separate feature branches. Keep the frontend untouched.
 
 ## Open Decisions
@@ -61,11 +64,12 @@ Continue the backend module sequence with independently reviewable features on s
 - Authorization is ROLE + SCOPE, and a role name alone never authorizes access. SUPER_ADMIN is the only role allowed SYSTEM scope.
 - The owner requested each new feature use a new Git branch. Supabase setup remains on codex/supabase-connection; current guest work is on codex/guest-management.
 - Guest Management is on `codex/guest-management`; Room Type and Amenity catalogs are on `codex/room-type-amenity-catalog`.
+- Room inventory is implemented on `codex/rooms`, based on the completed Room Type/Amenity catalog branch.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 
 ## Session Notes
 
 - Context files are stored under `Documentation/context/` and describe the HMS repository rather than the portfolio starter templates.
-- The original foundation milestone passed 19 tests and verified startup against Supabase through V005. The latest clean Maven test run passes 24 tests; tests use H2 in PostgreSQL mode with Hibernate schema validation enabled.
-- In the current verification session, database connection and application secret environment variables were not available. No Supabase migration or startup was attempted; remote V006/V007 status remains unverified.
+- The original foundation milestone passed 19 tests and verified startup against Supabase through V005. The latest full clean Maven test run passes 25 tests using H2 in PostgreSQL mode with Hibernate schema validation enabled.
+- In the current verification session, database connection and application secret environment variables were not available. No Supabase migration or startup was attempted; remote V006–V008 status remains unverified.

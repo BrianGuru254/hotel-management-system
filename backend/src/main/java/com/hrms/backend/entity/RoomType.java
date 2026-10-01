@@ -11,6 +11,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "room_types", indexes = {
         @Index(name = "idx_room_types_property_id", columnList = "property_id")
+}, uniqueConstraints = {
+        @UniqueConstraint(name = "uq_room_types_property_id_id", columnNames = {"property_id", "id"})
 })
 @Getter
 @Setter

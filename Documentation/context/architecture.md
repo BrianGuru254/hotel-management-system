@@ -20,7 +20,7 @@
 
 - `backend/src/main/java/com/hrms/backend/` — Spring Boot application, entities, DTOs, repositories, and future feature packages.
 - `backend/src/main/resources/application.yml` — application, database, JPA, Flyway, server, and actuator configuration. The default database target is the supplied Supabase PostgreSQL endpoint with `sslmode=require`; override `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `DATABASE_SCHEMA` through the environment. Include `currentSchema` in an overridden JDBC URL. Supabase can use an isolated `hms` schema without baselining its pre-existing `public` objects.
-- `backend/src/main/resources/db/migration/` — configured Flyway migration location; V003 adds Properties and ownership constraints, V004 aligns currency columns with `CHAR(3)`, V005 adds departments/users/roles and authentication foundations, V006 adds property-owned guests, and V007 adds property-owned room types and amenities.
+- `backend/src/main/resources/db/migration/` — configured Flyway migration location; V003 adds Properties and ownership constraints, V004 aligns currency columns with `CHAR(3)`, V005 adds departments/users/roles and authentication foundations, V006 adds property-owned guests, V007 adds property-owned room types and amenities, and V008 adds property-owned rooms and same-property amenity assignments.
 - `backend/main/resources/db/migration/` — an additional migration-looking directory exists outside the configured runtime path; do not assume Flyway executes it. Resolve duplication deliberately before adding migrations.
 - `Documentation/` — requirements, architecture, API, UX, and implementation plans.
 - Root `src/` — empty at inspection; no frontend architecture is established in source yet.
@@ -43,7 +43,9 @@ Guest profiles are property-owned. The guest's property determines its organizat
 
 ## Property Catalog Scope
 
-Room types and amenities are also property-owned. Catalog list queries first resolve properties visible through the user's current live ROLE + SCOPE assignments, and detail/create/update/delete operations authorize against the owning property's organization, branch, and property IDs. Room type codes and amenity names are case-insensitively unique within one property. Room inventory and room-to-amenity assignment are separate follow-on work.
+Room types, amenities, and rooms are property-owned. Catalog and room list queries first resolve properties visible through the user's current live ROLE + SCOPE assignments, and detail/create/update/delete operations authorize against the owning property's organization, branch, and property IDs. Room type codes, amenity names, and room numbers are case-insensitively unique within one property.
+
+Room inventory is property-owned and references a room type from that same property. The database uses composite property-scoped foreign keys for rooms and room-amenity assignments in addition to service validation. Housekeeping and maintenance receive status capabilities limited to their operational status group; reservation-aware availability belongs to the Reservations module.
 
 ## Invariants
 
