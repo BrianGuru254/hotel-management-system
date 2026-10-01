@@ -85,6 +85,7 @@ public class ScopeAuthorizationService {
     @Transactional(readOnly = true)
     public void requireCanManageUser(HmsUser user) {
         UUID actorId = currentUserId();
+        requireActiveUser(actorId);
         if (actorId.equals(user.getId())) {
             throw new AccessDeniedException("Manage the current account through the profile endpoints");
         }
@@ -131,6 +132,7 @@ public class ScopeAuthorizationService {
 
     private boolean isManageableByCurrentActor(ScopeGrantRequest target) {
         UUID actorId = currentUserId();
+        requireActiveUser(actorId);
         return assignments.findByUserId(actorId).stream()
                 .filter(grant -> hasCapability(grant, "USER_MANAGE"))
                 .anyMatch(grant -> containsGrant(grant, target));
@@ -160,20 +162,23 @@ public class ScopeAuthorizationService {
         List<UserRoleScope> grants = grantsWithCapability(capability);
         if (grants.isEmpty()) throw new AccessDeniedException("Missing capability");
         if (grants.stream().anyMatch(g -> g.getScopeType() == ScopeType.SYSTEM)) {
-            return new ScopeVisibility(true, Set.of(), Set.of(), Set.of());
+            return new ScopeVisibility(true, Set.of(), Set.of(), Set.of(), Set.of());
         }
         Set<UUID> organizationIds = new LinkedHashSet<>();
         Set<UUID> branchIds = new LinkedHashSet<>();
         Set<UUID> propertyIds = new LinkedHashSet<>();
+        Set<UUID> departmentIds = new LinkedHashSet<>();
         for (UserRoleScope grant : grants) {
             switch (grant.getScopeType()) {
                 case ORGANIZATION -> organizationIds.add(grant.getOrganization().getId());
                 case BRANCH -> branchIds.add(grant.getBranch().getId());
                 case PROPERTY -> propertyIds.add(grant.getProperty().getId());
-                case SYSTEM, DEPARTMENT, SELF -> { }
+                case DEPARTMENT -> departmentIds.add(grant.getDepartment().getId());
+                case SYSTEM, SELF -> { }
             }
         }
-        return new ScopeVisibility(false, Set.copyOf(organizationIds), Set.copyOf(branchIds), Set.copyOf(propertyIds));
+        return new ScopeVisibility(false, Set.copyOf(organizationIds), Set.copyOf(branchIds),
+                Set.copyOf(propertyIds), Set.copyOf(departmentIds));
     }
 
     private void requireActiveUser(UUID userId) {

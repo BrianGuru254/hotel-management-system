@@ -118,7 +118,7 @@ public class AuthenticationService {
         return issue(user, null, deviceInfo, ipAddress);
     }
 
-    @Transactional(noRollbackFor = RefreshTokenReuseException.class)
+    @Transactional(noRollbackFor = {RefreshTokenReuseException.class, InvalidRefreshTokenException.class})
     public IssuedTokens refresh(String rawToken, String deviceInfo, String ipAddress) {
         if (rawToken == null || rawToken.isBlank()) throw new InvalidRefreshTokenException();
         String hash = sha256(rawToken);
