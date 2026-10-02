@@ -37,6 +37,7 @@ CREATE TABLE guests (
  CONSTRAINT fk_guests_property FOREIGN KEY (property_id) REFERENCES properties(id),
  CONSTRAINT uq_guests_property_guest_number UNIQUE (property_id, guest_number),
  CONSTRAINT uq_guests_property_identification UNIQUE (property_id, identification_type, identification_number),
+ CONSTRAINT uq_guests_property_id_id UNIQUE (property_id, id),
  CONSTRAINT ck_guests_identification_pair CHECK (
    (identification_type IS NULL AND identification_number IS NULL) OR
    (identification_type IS NOT NULL AND identification_number IS NOT NULL)
@@ -160,6 +161,73 @@ CREATE TABLE system_bootstrap_state (
 );
 INSERT INTO system_bootstrap_state(id, completed, updated_at) VALUES (1, FALSE, CURRENT_TIMESTAMP);
 
+CREATE TABLE reservations (
+ id UUID PRIMARY KEY,
+ property_id UUID NOT NULL,
+ guest_id UUID NOT NULL,
+ room_type_id UUID NOT NULL,
+ room_id UUID,
+ reservation_number VARCHAR(50) NOT NULL,
+ check_in_date DATE NOT NULL,
+ check_out_date DATE NOT NULL,
+ adults INTEGER NOT NULL DEFAULT 1,
+ children INTEGER NOT NULL DEFAULT 0,
+ number_of_rooms INTEGER NOT NULL DEFAULT 1,
+ nightly_rate NUMERIC(12,2) NOT NULL,
+ deposit_amount NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+ currency_code CHAR(3) NOT NULL,
+ booking_source VARCHAR(50) NOT NULL DEFAULT 'DIRECT',
+ special_requests TEXT,
+ status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+ cancelled_at TIMESTAMP WITH TIME ZONE,
+ cancellation_reason TEXT,
+ created_by UUID REFERENCES users(id),
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_reservations_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_reservations_guest FOREIGN KEY (guest_id) REFERENCES guests(id),
+ CONSTRAINT fk_reservations_guest_scope FOREIGN KEY (property_id, guest_id) REFERENCES guests(property_id, id),
+ CONSTRAINT fk_reservations_room_type FOREIGN KEY (room_type_id) REFERENCES room_types(id),
+ CONSTRAINT fk_reservations_room_type_scope FOREIGN KEY (property_id, room_type_id) REFERENCES room_types(property_id, id),
+ CONSTRAINT fk_reservations_room FOREIGN KEY (room_id) REFERENCES rooms(id),
+ CONSTRAINT fk_reservations_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+ CONSTRAINT uq_reservations_property_scope UNIQUE (property_id, id),
+ CONSTRAINT ck_reservations_dates CHECK (check_out_date > check_in_date),
+ CONSTRAINT ck_reservations_adults CHECK (adults > 0),
+ CONSTRAINT ck_reservations_children CHECK (children >= 0),
+ CONSTRAINT ck_reservations_rooms CHECK (number_of_rooms > 0 AND (room_id IS NULL OR number_of_rooms = 1)),
+ CONSTRAINT ck_reservations_nightly_rate CHECK (nightly_rate >= 0),
+ CONSTRAINT ck_reservations_deposit CHECK (deposit_amount >= 0),
+ CONSTRAINT ck_reservations_status CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW')),
+ CONSTRAINT ck_reservations_cancelled_data CHECK (
+  (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL) OR
+  (status <> 'CANCELLED' AND cancelled_at IS NULL AND cancellation_reason IS NULL)
+ )
+);
+CREATE INDEX idx_reservations_property_status ON reservations(property_id, status);
+CREATE INDEX idx_reservations_property_dates ON reservations(property_id, check_in_date, check_out_date);
+CREATE INDEX idx_reservations_room_type_dates ON reservations(property_id, room_type_id, check_in_date, check_out_date);
+CREATE INDEX idx_reservations_room_dates ON reservations(room_id, check_in_date, check_out_date);
+CREATE INDEX idx_reservations_guest_id ON reservations(guest_id);
+CREATE UNIQUE INDEX uq_reservations_property_number_ci ON reservations(property_id, reservation_number);
+
+CREATE TABLE reservation_status_history (
+ id UUID PRIMARY KEY,
+ property_id UUID NOT NULL,
+ reservation_id UUID NOT NULL,
+ previous_status VARCHAR(30),
+ new_status VARCHAR(30) NOT NULL,
+ reason TEXT,
+ changed_by UUID REFERENCES users(id),
+ changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_reservation_history_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_reservation_history_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE CASCADE,
+ CONSTRAINT fk_reservation_history_reservation_scope FOREIGN KEY (property_id, reservation_id) REFERENCES reservations(property_id, id) ON DELETE CASCADE,
+ CONSTRAINT ck_reservation_history_status CHECK (new_status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'))
+);
+CREATE INDEX idx_reservation_history_property_reservation ON reservation_status_history(property_id, reservation_id, changed_at);
+
+
 INSERT INTO roles(role_key, display_name, description, created_at, updated_at)
 VALUES
  ('SUPER_ADMIN','Super Admin','System-wide administrator',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
@@ -194,7 +262,8 @@ INSERT INTO capabilities(capability_key, description) VALUES
  ('ROOM_MAINTENANCE_STATUS_UPDATE','Update room status for maintenance work'), ('ROOM_AMENITY_UPDATE','Assign amenities to rooms'),
  ('DEPARTMENT_READ','Read departments'), ('DEPARTMENT_CREATE','Create departments'), ('DEPARTMENT_UPDATE','Update departments'), ('DEPARTMENT_DELETE','Delete departments'),
  ('USER_MANAGE','Manage users'), ('ROLE_READ','Read roles'), ('PROFILE_READ','Read profile'), ('PROFILE_UPDATE','Update profile'), ('PASSWORD_CHANGE','Change password'),
- ('REPORT_READ','Read reports'), ('AUDIT_READ','Read audit records'), ('SECURITY_MANAGE','Manage security');
+ ('REPORT_READ','Read reports'), ('AUDIT_READ','Read audit records'), ('SECURITY_MANAGE','Manage security'),
+ ('RESERVATION_READ','Read reservations'), ('RESERVATION_CREATE','Create reservations'), ('RESERVATION_UPDATE','Update pending reservations'), ('RESERVATION_CONFIRM','Confirm reservations'), ('RESERVATION_CANCEL','Cancel reservations'), ('RESERVATION_AVAILABILITY_READ','Check reservation availability'), ('RESERVATION_HISTORY_READ','Read reservation status history');
 
 INSERT INTO role_capabilities(role_key, capability_key)
 SELECT 'SUPER_ADMIN', capability_key FROM capabilities;
@@ -227,3 +296,11 @@ INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('HOUSEKEEPING_STAFF','ROOM_READ'),('HOUSEKEEPING_STAFF','ROOM_HOUSEKEEPING_STATUS_UPDATE'),
  ('MAINTENANCE_MANAGER','ROOM_READ'),('MAINTENANCE_MANAGER','ROOM_MAINTENANCE_STATUS_UPDATE'),
  ('MAINTENANCE_STAFF','ROOM_READ'),('MAINTENANCE_STAFF','ROOM_MAINTENANCE_STATUS_UPDATE');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('ORGANIZATION_ADMIN','RESERVATION_READ'),('ORGANIZATION_ADMIN','RESERVATION_CREATE'),('ORGANIZATION_ADMIN','RESERVATION_UPDATE'),('ORGANIZATION_ADMIN','RESERVATION_CONFIRM'),('ORGANIZATION_ADMIN','RESERVATION_CANCEL'),('ORGANIZATION_ADMIN','RESERVATION_AVAILABILITY_READ'),('ORGANIZATION_ADMIN','RESERVATION_HISTORY_READ'),
+ ('BRANCH_MANAGER','RESERVATION_READ'),('BRANCH_MANAGER','RESERVATION_CREATE'),('BRANCH_MANAGER','RESERVATION_UPDATE'),('BRANCH_MANAGER','RESERVATION_CONFIRM'),('BRANCH_MANAGER','RESERVATION_CANCEL'),('BRANCH_MANAGER','RESERVATION_AVAILABILITY_READ'),('BRANCH_MANAGER','RESERVATION_HISTORY_READ'),
+ ('PROPERTY_MANAGER','RESERVATION_READ'),('PROPERTY_MANAGER','RESERVATION_CREATE'),('PROPERTY_MANAGER','RESERVATION_UPDATE'),('PROPERTY_MANAGER','RESERVATION_CONFIRM'),('PROPERTY_MANAGER','RESERVATION_CANCEL'),('PROPERTY_MANAGER','RESERVATION_AVAILABILITY_READ'),('PROPERTY_MANAGER','RESERVATION_HISTORY_READ'),
+ ('FRONT_DESK','RESERVATION_READ'),('FRONT_DESK','RESERVATION_CREATE'),('FRONT_DESK','RESERVATION_UPDATE'),('FRONT_DESK','RESERVATION_CONFIRM'),('FRONT_DESK','RESERVATION_CANCEL'),('FRONT_DESK','RESERVATION_AVAILABILITY_READ'),('FRONT_DESK','RESERVATION_HISTORY_READ'),
+ ('RESERVATIONS_AGENT','RESERVATION_READ'),('RESERVATIONS_AGENT','RESERVATION_CREATE'),('RESERVATIONS_AGENT','RESERVATION_UPDATE'),('RESERVATIONS_AGENT','RESERVATION_CONFIRM'),('RESERVATIONS_AGENT','RESERVATION_CANCEL'),('RESERVATIONS_AGENT','RESERVATION_AVAILABILITY_READ'),('RESERVATIONS_AGENT','RESERVATION_HISTORY_READ'),
+ ('REPORTING_USER','RESERVATION_READ'),('REPORTING_USER','RESERVATION_AVAILABILITY_READ'),('REPORTING_USER','RESERVATION_HISTORY_READ');
+
