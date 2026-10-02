@@ -13,6 +13,8 @@ import java.util.UUID;
 import com.hrms.backend.entity.RoomStatus;
 
 public interface RoomRepository extends JpaRepository<Room, UUID> {
+    long countByPropertyIdAndRoomTypeId(UUID propertyId, UUID roomTypeId);
+
     long countByPropertyIdAndRoomTypeIdAndCurrentStatus(UUID propertyId, UUID roomTypeId, RoomStatus currentStatus);
 
     @Query(value = """

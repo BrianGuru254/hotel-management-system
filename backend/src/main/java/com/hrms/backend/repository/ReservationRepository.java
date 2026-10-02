@@ -63,8 +63,25 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
                             @Param("checkInDate") LocalDate checkInDate,
                             @Param("checkOutDate") LocalDate checkOutDate);
 
+    @Query("""
+            select coalesce(sum(reservation.numberOfRooms), 0) from Reservation reservation
+            where reservation.property.id = :propertyId and reservation.roomType.id = :roomTypeId
+              and reservation.id <> :excludeReservationId
+              and reservation.status in :statuses
+              and reservation.checkInDate < :checkOutDate and reservation.checkOutDate > :checkInDate
+            """)
+    long countReservedRoomsExcluding(@Param("propertyId") UUID propertyId,
+                                     @Param("roomTypeId") UUID roomTypeId,
+                                     @Param("excludeReservationId") UUID excludeReservationId,
+                                     @Param("statuses") Collection<ReservationStatus> statuses,
+                                     @Param("checkInDate") LocalDate checkInDate,
+                                     @Param("checkOutDate") LocalDate checkOutDate);
+
     boolean existsByPropertyIdAndReservationNumberIgnoreCase(UUID propertyId, String reservationNumber);
 
     boolean existsByRoomIdAndStatusInAndCheckInDateLessThanAndCheckOutDateGreaterThan(
             UUID roomId, Collection<ReservationStatus> statuses, LocalDate checkOutDate, LocalDate checkInDate);
+
+    boolean existsByRoomIdAndIdNotAndStatusInAndCheckInDateLessThanAndCheckOutDateGreaterThan(
+            UUID roomId, UUID excludeReservationId, Collection<ReservationStatus> statuses, LocalDate checkOutDate, LocalDate checkInDate);
 }
