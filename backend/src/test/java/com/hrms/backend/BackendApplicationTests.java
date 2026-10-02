@@ -52,6 +52,8 @@ class BackendApplicationTests {
 
 	@BeforeEach
 	void resetTestData() {
+		jdbc.update("DELETE FROM reservation_status_history");
+		jdbc.update("DELETE FROM reservations");
 		jdbc.update("DELETE FROM refresh_tokens");
 		jdbc.update("DELETE FROM users");
 		jdbc.update("DELETE FROM room_amenities");
@@ -431,6 +433,118 @@ class BackendApplicationTests {
 						.id(UUID.randomUUID().toString()).build())).getTokenValue();
 		mvc.perform(get("/api/v1/organizations").header("Authorization", bearer(expired))).andExpect(status().isUnauthorized());
 		assertNotNull(accessToken);
+	}
+
+	@Test
+	void reservationLifecycleAndPropertyIsolation() throws Exception {
+		// ── Bootstrap superuser ───────────────────────────────────────────────────
+		Session root = bootstrap();
+		String rootToken = root.accessToken();
+
+		// ── Create org / branch / property A ─────────────────────────────────────
+		String orgId   = createOrganization(rootToken, "Reservations Org");
+		String branchId = createBranch(rootToken, orgId, "RB1");
+		String propAId  = createProperty(rootToken, orgId, branchId, "PROP-A");
+
+		// ── Create a room type (2 rooms of this type) ─────────────────────────────
+		String roomTypeId = createRoomType(rootToken, propAId, "Deluxe Room", "DLX");
+		String room1Id    = createRoom(rootToken, propAId, roomTypeId, "101", 2);
+		String room2Id    = createRoom(rootToken, propAId, roomTypeId, "102", 2);
+
+		// ── Create a guest ────────────────────────────────────────────────────────
+		String guestId = createGuest(rootToken, propAId, "Alice", "ID-TEST-001");
+
+		// ── Create a reservation (no specific room — pool allocation) ─────────────
+		Map<String, Object> createReq = new HashMap<>();
+		createReq.put("propertyId",    propAId);
+		createReq.put("guestId",       guestId);
+		createReq.put("roomTypeId",    roomTypeId);
+		createReq.put("checkInDate",   "2027-06-01");
+		createReq.put("checkOutDate",  "2027-06-05");
+		createReq.put("adults",        2);
+		createReq.put("children",      0);
+		createReq.put("numberOfRooms", 1);
+		createReq.put("nightlyRate",   150.00);
+		createReq.put("depositAmount", 75.00);
+
+		MvcResult createResult = mvc.perform(post("/api/v1/reservations")
+						.header("Authorization", bearer(rootToken))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(mapper.writeValueAsString(createReq)))
+				.andExpect(status().isCreated())
+				.andReturn();
+
+		String respBody = createResult.getResponse().getContentAsString();
+		String reservationId     = mapper.readTree(respBody).get("id").asText();
+		String reservationNumber = mapper.readTree(respBody).get("reservationNumber").asText();
+		String statusAfterCreate = mapper.readTree(respBody).get("status").asText();
+
+		assertNotNull(reservationId);
+		assertNotNull(reservationNumber);
+		assertEquals("PENDING", statusAfterCreate);
+
+		// ── Check availability for same room type and dates ───────────────────────
+		Map<String, Object> availReq = new HashMap<>();
+		availReq.put("propertyId",    propAId);
+		availReq.put("roomTypeId",    roomTypeId);
+		availReq.put("checkInDate",   "2027-06-01");
+		availReq.put("checkOutDate",  "2027-06-05");
+		availReq.put("numberOfRooms", 1);
+
+		MvcResult availResult = mvc.perform(post("/api/v1/reservations/check-availability")
+						.header("Authorization", bearer(rootToken))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(mapper.writeValueAsString(availReq)))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		String availBody = availResult.getResponse().getContentAsString();
+		assertTrue(mapper.readTree(availBody).get("available").asBoolean(),
+				"Should still be available (2 rooms, 1 reserved)");
+
+		// ── Fetch reservation by ID ───────────────────────────────────────────────
+		mvc.perform(get("/api/v1/reservations/" + reservationId)
+						.header("Authorization", bearer(rootToken)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(reservationId))
+				.andExpect(jsonPath("$.status").value("PENDING"));
+
+		// ── Confirm reservation ───────────────────────────────────────────────────
+		mvc.perform(patch("/api/v1/reservations/" + reservationId + "/confirm")
+						.header("Authorization", bearer(rootToken)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+		// ── Property isolation: second property user cannot see prop-A reservations ─
+		String propBId = createProperty(rootToken, orgId, branchId, "PROP-B");
+		createScopedUser(rootToken, "frontdesk.b@example.test", "FRONT_DESK",
+				"PROPERTY", orgId, branchId, propBId, null);
+		String propBToken = login("frontdesk.b@example.test");
+
+		mvc.perform(get("/api/v1/reservations/" + reservationId)
+						.header("Authorization", bearer(propBToken)))
+				.andExpect(status().isForbidden());
+
+		// ── Cancel the reservation ────────────────────────────────────────────────
+		Map<String, Object> cancelReq = new HashMap<>();
+		cancelReq.put("reason", "Guest changed plans");
+
+		mvc.perform(post("/api/v1/reservations/" + reservationId + "/cancel")
+						.header("Authorization", bearer(rootToken))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(mapper.writeValueAsString(cancelReq)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+
+		// ── Verify status history contains all transitions ────────────────────────
+		MvcResult histResult = mvc.perform(get("/api/v1/reservations/" + reservationId + "/history")
+						.header("Authorization", bearer(rootToken)))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		String histBody = histResult.getResponse().getContentAsString();
+		int histCount = mapper.readTree(histBody).size();
+		assertTrue(histCount >= 2, "Should have at least 2 status history entries (PENDING→CONFIRMED, CONFIRMED→CANCELLED)");
 	}
 
 	private Session bootstrap() throws Exception {
