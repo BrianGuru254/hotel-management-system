@@ -855,6 +855,8 @@ PUT    /api/v1/employees/{id}
 DELETE /api/v1/employees/{id}
 ```
 
+Employee records are scoped to the branch's organization. Optional department assignments must belong to the same branch; optional user accounts must be active and scoped within that organization or branch. Delete archives the employee as INACTIVE. Flyway V013 adds the employee table and branch/department scope constraints; V014 links operational assignments to employees.
+
 ---
 
 # 17. Guest Module
@@ -1062,6 +1064,8 @@ CLOSED
 CANCELLED
 ```
 
+The implemented REST module is property-scoped. Room-linked requests lock a same-property room in `MAINTENANCE`; assigned technicians must be active users with the request property's live maintenance-update capability. Status history records the actor and reason. Resolving or cancelling a request restores its prior available/dirty state. Flyway V012 defines the request and history tables.
+
 The service should support:
 
 - issue reporting
@@ -1099,6 +1103,8 @@ RESERVED
 CLEANING
 OUT_OF_SERVICE
 ```
+
+Runtime implementation provides branch-scoped restaurant/table listing and management. Table status transitions are validated, restaurant names and per-restaurant table numbers are case-insensitively unique, and a restaurant cannot be deactivated while tables are in use. Flyway V015 creates the tables and capability mappings. Order assignment is deferred until POS is implemented.
 
 ---
 

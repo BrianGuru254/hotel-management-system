@@ -702,6 +702,8 @@ CREATE TABLE departments (
 
 # 19. Employees
 
+Runtime note: V013 adds same-organization/branch constraints and case-insensitive employee uniqueness; V014 adds employee assignment references to the operational task tables. The original table sketch below omits those later constraints.
+
 ```sql
 CREATE TABLE employees (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1139,6 +1141,8 @@ CREATE TABLE housekeeping_tasks (
 
 # 29. Maintenance
 
+The runtime schema in Flyway V012 uses `property_id` with a composite same-property room reference. Since an Employee table is not yet implemented, reporter and assigned technician IDs reference active users; the runtime migration adds a status-history table and one active room-blocking request per room. The SQL sketch below describes the earlier branch/employee model and is retained as historical design reference.
+
 ```sql
 CREATE TABLE maintenance_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1185,6 +1189,8 @@ CREATE TABLE maintenance_requests (
 ---
 
 # 30. Restaurants
+
+Runtime implementation: Flyway V015 adds case-insensitive branch-local restaurant names, per-restaurant table numbers, capacity/status checks, and restaurant/table capability mappings. Table changes are audited through timestamps; order assignment is part of the later POS module.
 
 ```sql
 CREATE TABLE restaurants (

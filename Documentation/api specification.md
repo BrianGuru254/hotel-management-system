@@ -697,15 +697,20 @@ Request:
 ```json
 {
   "branchId": "UUID",
+  "departmentId": "UUID",
+  "userId": "UUID",
   "employeeNumber": "EMP001",
   "firstName": "John",
   "lastName": "Doe",
   "phone": "+254700000000",
   "email": "john@example.com",
-  "department": "RECEPTION",
-  "position": "Receptionist"
+  "jobTitle": "Receptionist",
+  "employmentStatus": "ACTIVE",
+  "hireDate": "2026-10-05"
 }
 ```
+
+`departmentId` and `userId` are optional. List filters include `organizationId`, `branchId`, `departmentId`, `status`, and `search`, with pagination and sorting. Delete archives the employee by marking the record INACTIVE; it does not remove the record.
 
 ## Update Employee
 
@@ -792,6 +797,8 @@ Invoices
 Payments
 Loyalty
 ```
+
+The current backend returns the first 100 reservations and stays for the guest at their owning property, ordered newest first. Stay history includes both the primary guest and additional guests assigned to the stay. `availableSections` lists `reservations` and `stays`; `unavailableSections` explicitly reports `orders`, `invoices`, `payments`, and `loyalty` until those modules are implemented. The endpoint requires `GUEST_READ` capability and access to the guest's property.
 
 ---
 
@@ -1245,10 +1252,13 @@ GET /api/v1/housekeeping/tasks
 Filters:
 
 ```text
+propertyId
 roomId
-assignedTo
 status
-priority
+page
+size
+sort
+direction
 ```
 
 ## Create Task
@@ -1257,31 +1267,23 @@ priority
 POST /api/v1/housekeeping/tasks
 ```
 
-## Assign Task
+Request fields: `propertyId`, `roomId`, optional `taskType`, `priority`, and `notes`.
+
+## Update Task
 
 ```http
-PATCH /api/v1/housekeeping/tasks/{id}/assign
+PUT /api/v1/housekeeping/tasks/{id}
 ```
 
-Request:
-
-```json
-{
-  "employeeId": "UUID"
-}
-```
-
-## Start Task
-
-```http
-PATCH /api/v1/housekeeping/tasks/{id}/start
-```
+The update accepts optional `assignedEmployeeId`, `status`, `priority`, and `notes`. Assignment requires the scoped `HOUSEKEEPING_ASSIGN` capability and an active employee assigned to the same property or branch.
 
 ## Complete Task
 
 ```http
-PATCH /api/v1/housekeeping/tasks/{id}/complete
+POST /api/v1/housekeeping/tasks/{id}/complete
 ```
+
+Starting a task is requested by updating its status to `IN_PROGRESS`; completion releases a cleaned room to `AVAILABLE`.
 
 ---
 
@@ -1293,17 +1295,23 @@ PATCH /api/v1/housekeeping/tasks/{id}/complete
 GET /api/v1/maintenance
 ```
 
+Supports `propertyId`, `roomId`, `status`, `priority`, `page`, `size`, `sort`, and `direction` filters. Results are scoped to the caller's live maintenance capability and property grants.
+
 ## Create Request
 
 ```http
 POST /api/v1/maintenance
 ```
 
+Request fields: required `propertyId` and `title`, optional `roomId`, `description`, and `priority`. A room-linked request blocks that room from new bookings until resolution or cancellation. The room and request must belong to the same property.
+
 ## Assign Technician
 
 ```http
 PATCH /api/v1/maintenance/{id}/assign
 ```
+
+Request: `{ "employeeId": "UUID" }`. The technician must be an active employee with a linked account holding scoped maintenance-update capability for the request property.
 
 ## Start Maintenance
 
@@ -1324,6 +1332,8 @@ Request:
   "resolution": "Air conditioner repaired"
 }
 ```
+
+`GET /api/v1/maintenance/{id}` returns a request and `GET /api/v1/maintenance/{id}/history` returns its status audit trail. Resolved requests can be closed at `PATCH /api/v1/maintenance/{id}/close`; open or assigned requests can be cancelled at `PATCH /api/v1/maintenance/{id}/cancel`. Resolving or cancelling restores a previously available room to AVAILABLE; other cleanable room states return to DIRTY.
 
 ---
 
@@ -1347,6 +1357,8 @@ GET /api/v1/restaurants/{id}
 POST /api/v1/restaurants
 ```
 
+Request fields: `branchId`, `name`, optional `description`, `openingTime`, `closingTime`, and `active`. Restaurant and table APIs require matching branch-scoped capabilities. Names are unique without regard to case within a branch.
+
 ## Update Restaurant
 
 ```http
@@ -1368,6 +1380,8 @@ GET /api/v1/restaurants/{restaurantId}/tables
 ```http
 POST /api/v1/restaurants/{restaurantId}/tables
 ```
+
+Table requests require a unique `tableNumber` and positive `capacity`; `location` is optional. Tables begin as AVAILABLE. Status transitions are constrained by the current table status; occupied tables must move through CLEANING before returning to AVAILABLE.
 
 Request:
 
@@ -1401,6 +1415,8 @@ PATCH /api/v1/tables/{id}/status
 GET /api/v1/restaurants/{restaurantId}/menu/categories
 ```
 
+Returns a paginated list of active categories, ordered by display order by default.
+
 ## Create Category
 
 ```http
@@ -1418,6 +1434,8 @@ PUT /api/v1/menu/categories/{id}
 ```http
 DELETE /api/v1/menu/categories/{id}
 ```
+
+Deactivates the category; category deletion is soft so menu references remain valid.
 
 ---
 
@@ -1481,6 +1499,14 @@ Request:
   "available": false
 }
 ```
+
+## Delete Item
+
+```http
+DELETE /api/v1/menu/items/{id}
+```
+
+Marks the item unavailable instead of removing its record. Menu reads are limited to restaurants in the caller's authorized branch scope. Category/item writes require the corresponding `MENU_CREATE` or `MENU_UPDATE` capability.
 
 ---
 

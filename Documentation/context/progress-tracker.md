@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Hotel Operations is in progress. The Stay and front-desk module is the current feature on branch `codex/stays`.
+Restaurant/POS is in progress. Restaurant and table management is the current feature on branch `codex/restaurants`.
 
 ## Current Goal
 
-Continue the backend module sequence with independently reviewable features on separate Git branches. The current step adds property-scoped Stays, reservation check-in, walk-in check-in, and checkout.
+Continue the backend module sequence with independently reviewable features on separate Git branches. Restaurant and restaurant-table management are implemented in the current feature branch.
 
 ## Completed (Observed)
 
@@ -36,6 +36,8 @@ Continue the backend module sequence with independently reviewable features on s
 - Flyway V009 adds reservations, reservation status history, property-scoped composite foreign keys, uniqueness/indexes, checks, and the initial reservation capability mapping. The migration is additive and has not been applied to the remote database in this session.
 - Stays are property-owned, linked to same-property guests/rooms and optionally a reservation. A confirmed reservation or a scoped walk-in can be checked in; active stays lock their room, and check-in/check-out are audited.
 - Stay guest assignments are property-constrained, support one primary guest per stay, and prevent a guest list from exceeding the room capacity.
+- Housekeeping supports property-scoped tasks, active-user assignment, status transitions, pagination and filtering. Completing cleaning/deep-cleaning tasks returns DIRTY/CLEANING rooms to AVAILABLE. Flyway V011 adds the task table with same-property room constraints.
+- Maintenance supports property-scoped issue reporting, technician assignment, start/resolve/close/cancel transitions, room blocking/restoration, filtered pagination, and status history. Flyway V012 adds requests/history with a same-property room FK and one active room-blocking request per room.
 - Check-out marks the room DIRTY for housekeeping and can complete its reservation after the associated rooms have checked out. Checkout preview returns an accommodation and deposit estimate; payment processing is not implemented in this module.
 - Flyway V010 adds property-scoped stays, guest assignments, stay status history, an active-room uniqueness constraint, indexes, checks, and initial Stay/front-desk capabilities. The migration is additive and has not been applied to the remote database in this session.
 - Flyway validated and applied through V005 against PostgreSQL 17.11. The application started with Hibernate `ddl-auto=validate`; live health returned 200 and an unauthenticated organization request returned 401.
@@ -53,9 +55,9 @@ Continue the backend module sequence with independently reviewable features on s
 
 ## Next Up
 
-1. Re-establish database and signing-secret environment values, then apply/verify V006–V010 against Supabase and confirm Hibernate schema validation and application startup.
-2. Continue Hotel Operations in dependency order with Housekeeping and Maintenance. Add Guest History after its related modules exist.
-3. Proceed through Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services in separate feature branches. Keep the frontend untouched.
+1. Implement POS/Orders and table-order assignment, then Kitchen, Inventory/Procurement, Finance, and remaining documented modules in dependency order.
+2. Re-establish database and signing-secret environment values, then apply/verify V006–V016 against Supabase and confirm Hibernate schema validation and application startup.
+3. Keep the frontend untouched while completing the documented backend modules.
 
 ## Open Decisions
 
@@ -73,6 +75,12 @@ Continue the backend module sequence with independently reviewable features on s
 - Room inventory is implemented on `codex/rooms`, based on the completed Room Type/Amenity catalog branch.
 - Reservations are implemented in the current `Hotel-Core` line; Stay/front-desk work is isolated on `codex/stays`.
 - Each additional backend feature continues on a dedicated `codex/` branch. The frontend remains untouched.
+- Housekeeping is implemented on `codex/housekeeping`; its original user assignments are linked to employees by V014 where possible.
+- Maintenance is implemented on `codex/maintenance`; V014 links assigned employees, whose accounts must hold the live maintenance-update capability within the request property.
+- Employee management is implemented on `codex/employees`; records are branch-owned, optionally department- and user-linked, organization-unique, and soft-archived.
+- Guest History is implemented on `codex/guest-history` for reservations and primary/additional guest stays. Orders, invoices, payments, and loyalty are explicitly returned as unavailable pending those modules.
+- Branch-scoped Restaurants and Restaurant Tables are implemented on `codex/restaurants`; Menu, orders, and table-order assignment remain later modules.
+- Restaurant Menu Categories and Items are implemented on `codex/menu` with branch visibility, scoped capabilities, same-restaurant category constraints, price/tax/preparation validation, and category soft-deactivation. Flyway V016 adds the menu tables. Maven compile passes; tests and live migration/startup checks have not been run.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 
@@ -81,3 +89,7 @@ Continue the backend module sequence with independently reviewable features on s
 - Context files are stored under `Documentation/context/` and describe the HMS repository rather than the portfolio starter templates.
 - The original foundation milestone passed 19 tests and verified startup against Supabase through V005. The latest Maven suite passes 27 tests using H2 in PostgreSQL mode with Hibernate schema validation enabled.
 - In the current verification session, database connection and application secret environment variables were not available. No Supabase migration or startup was attempted; remote V006–V010 status remains unverified.
+- Housekeeping code and migration V011 are implemented on `codex/housekeeping`. Tests and live migration were not run. The Maven wrapper's PowerShell cache-path null handling was fixed on the Employee branch; compile now succeeds.
+- Maintenance code and migration V012 are implemented on `codex/maintenance`. Tests and live migration have not been run.
+- Employee management is implemented on `codex/employees` with migrations V013 and V014; tests and live migration have not been run. Maven compile passes.
+- Guest History is implemented on `codex/guest-history`; Maven compile passes. Automated tests and live database checks have not been run.

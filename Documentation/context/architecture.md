@@ -47,6 +47,18 @@ Room types, amenities, and rooms are property-owned. Catalog and room list queri
 
 Room inventory is property-owned and references a room type from that same property. The database uses composite property-scoped foreign keys for rooms and room-amenity assignments in addition to service validation. Housekeeping and maintenance receive status capabilities limited to their operational status group; reservation-aware availability belongs to the Reservations module.
 
+Housekeeping tasks are property-owned and reference a room in that same property. Assignments reference active employees in the same branch and, when department-bound, the same property. Completing room-cleaning/deep-cleaning work returns a DIRTY or CLEANING room to AVAILABLE under the housekeeping room-status capability.
+
+Maintenance requests are property-owned and may reference a same-property room. A room-linked active request locks the room and keeps it out of reservation availability; occupied, reserved, already-maintenance, and out-of-order rooms cannot receive a second maintenance lock. Assignments require an active employee with an account that has scoped maintenance-update permission. Status changes are recorded in a property-constrained history table. Resolve/cancel restores the room to its pre-maintenance cleanable state.
+
+Employees belong to one organization and branch, with an optional department constrained to that same branch and a one-to-one optional user account. HR list/detail/create/update/archive operations enforce live employee capabilities and scope; employee numbers and email addresses are unique case-insensitively within an organization. Housekeeping and Maintenance assignments reference employees after V014.
+
+Guest History currently composes up to 100 same-property reservations and stays in reverse chronological order, including stays where the guest is an additional registered occupant. Orders, invoices, payments, and loyalty are reported as unavailable until those modules exist; the endpoint does not imply that the guest has no records in those areas.
+
+Restaurants belong to branches; tables belong to one restaurant. Restaurant and table management requires live branch-scoped capabilities. Table occupancy status follows a constrained lifecycle, and a restaurant cannot be deactivated while any table is not AVAILABLE. Order-to-table assignment is deferred to the POS/Orders module.
+
+Restaurant menus are branch-scoped through their owning restaurant. Categories and items are soft-deactivated/availability-managed, and items must reference a category from the same restaurant. Menu listing is restricted to the caller's visible branches; `MENU_READ`, `MENU_CREATE`, and `MENU_UPDATE` are the live capabilities. Flyway V016 adds menu category/item storage and scope constraints.
+
 Reservations and Stays are also Property-scoped. Reservations reference a guest, room type, and optional room from that same property, and the database reinforces this with composite foreign keys. Check-in requires a confirmed reservation or an explicitly scoped walk-in; each active Stay locks one physical room. Guest assignments on a Stay are property-bound. Check-out moves the room to DIRTY and updates the reservation lifecycle. Checkout preview is an estimate from the saved nightly rate and deposit; payments, folios, and invoicing remain later Finance work. Stay checkout is stored as a local date to align with reservation dates, while actual check-in/out timestamps remain timezone-aware.
 
 ## Invariants

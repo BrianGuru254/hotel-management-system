@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
+    Page<Reservation> findByPropertyIdAndGuestId(UUID propertyId, UUID guestId, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select reservation from Reservation reservation where reservation.id = :id")
     Optional<Reservation> findByIdForUpdate(@Param("id") UUID id);

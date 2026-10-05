@@ -104,7 +104,8 @@ CREATE TABLE departments (
  created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
  CONSTRAINT fk_departments_property_scope FOREIGN KEY (organization_id, branch_id, property_id) REFERENCES properties(organization_id, branch_id, id),
  CONSTRAINT uq_departments_property_code UNIQUE (property_id, code),
- CONSTRAINT uq_departments_scope UNIQUE (organization_id, branch_id, property_id, id)
+ CONSTRAINT uq_departments_scope UNIQUE (organization_id, branch_id, property_id, id),
+ CONSTRAINT uq_departments_org_branch_id UNIQUE (organization_id, branch_id, id)
 );
 
 CREATE TABLE roles (
@@ -407,3 +408,122 @@ INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('FRONT_DESK','STAY_READ'),('FRONT_DESK','STAY_HISTORY_READ'),('FRONT_DESK','STAY_GUEST_MANAGE'),('FRONT_DESK','CHECK_IN'),('FRONT_DESK','WALK_IN_CHECK_IN'),('FRONT_DESK','CHECK_OUT'),('FRONT_DESK','CHECKOUT_PREVIEW_READ'),
  ('RESERVATIONS_AGENT','STAY_READ'),('RESERVATIONS_AGENT','STAY_HISTORY_READ'),('RESERVATIONS_AGENT','STAY_GUEST_MANAGE'),('RESERVATIONS_AGENT','CHECK_IN'),('RESERVATIONS_AGENT','WALK_IN_CHECK_IN'),('RESERVATIONS_AGENT','CHECK_OUT'),('RESERVATIONS_AGENT','CHECKOUT_PREVIEW_READ'),
  ('REPORTING_USER','STAY_READ'),('REPORTING_USER','STAY_HISTORY_READ'),('REPORTING_USER','CHECKOUT_PREVIEW_READ');
+
+CREATE TABLE housekeeping_tasks (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, room_id UUID NOT NULL, assigned_user_id UUID,
+ task_type VARCHAR(50) NOT NULL, status VARCHAR(30) NOT NULL, priority VARCHAR(20) NOT NULL, notes VARCHAR(100000),
+ assigned_at TIMESTAMP WITH TIME ZONE, started_at TIMESTAMP WITH TIME ZONE, completed_at TIMESTAMP WITH TIME ZONE,
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_housekeeping_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_housekeeping_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+ CONSTRAINT fk_housekeeping_assignee FOREIGN KEY (assigned_user_id) REFERENCES users(id)
+);
+CREATE INDEX idx_housekeeping_property_status ON housekeeping_tasks(property_id, status, created_at);
+CREATE INDEX idx_housekeeping_room_status ON housekeeping_tasks(room_id, status);
+
+CREATE TABLE maintenance_requests (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, room_id UUID, reported_by UUID NOT NULL, assigned_user_id UUID,
+ title VARCHAR(200) NOT NULL, description VARCHAR(100000), resolution VARCHAR(100000), priority VARCHAR(20) NOT NULL,
+ status VARCHAR(30) NOT NULL, room_status_before VARCHAR(30), reported_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ assigned_at TIMESTAMP WITH TIME ZONE, started_at TIMESTAMP WITH TIME ZONE, resolved_at TIMESTAMP WITH TIME ZONE,
+ closed_at TIMESTAMP WITH TIME ZONE, created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_maintenance_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_maintenance_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+ CONSTRAINT fk_maintenance_reporter FOREIGN KEY (reported_by) REFERENCES users(id),
+ CONSTRAINT fk_maintenance_assignee FOREIGN KEY (assigned_user_id) REFERENCES users(id),
+ CONSTRAINT uq_maintenance_property_scope UNIQUE (property_id, id)
+);
+CREATE INDEX idx_maintenance_property_status ON maintenance_requests(property_id, status, reported_at);
+CREATE INDEX idx_maintenance_room_status ON maintenance_requests(room_id, status);
+CREATE TABLE maintenance_status_history (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, maintenance_request_id UUID NOT NULL,
+ previous_status VARCHAR(30), new_status VARCHAR(30) NOT NULL, reason VARCHAR(1000), changed_by UUID NOT NULL,
+ changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_maintenance_history_request_scope FOREIGN KEY (property_id, maintenance_request_id) REFERENCES maintenance_requests(property_id, id),
+ CONSTRAINT fk_maintenance_history_actor FOREIGN KEY (changed_by) REFERENCES users(id)
+);
+CREATE INDEX idx_maintenance_history_request ON maintenance_status_history(property_id, maintenance_request_id, changed_at);
+CREATE TABLE employees (
+ id UUID PRIMARY KEY, organization_id UUID NOT NULL, branch_id UUID NOT NULL, department_id UUID, user_id UUID,
+ employee_number VARCHAR(50) NOT NULL, first_name VARCHAR(100) NOT NULL, last_name VARCHAR(100) NOT NULL,
+ email VARCHAR(255), phone VARCHAR(50), job_title VARCHAR(150), employment_status VARCHAR(30) NOT NULL,
+ hire_date DATE, created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL, deleted_at TIMESTAMP WITH TIME ZONE,
+ CONSTRAINT fk_employees_branch_scope FOREIGN KEY (organization_id, branch_id) REFERENCES branches(organization_id, id),
+ CONSTRAINT fk_employees_department_scope FOREIGN KEY (organization_id, branch_id, department_id) REFERENCES departments(organization_id, branch_id, id),
+ CONSTRAINT fk_employees_user FOREIGN KEY (user_id) REFERENCES users(id),
+ CONSTRAINT uq_employees_org_scope UNIQUE (organization_id, id),
+ CONSTRAINT uq_employees_org_branch_id UNIQUE (organization_id, branch_id, id),
+ CONSTRAINT uq_employees_org_number UNIQUE (organization_id, employee_number),
+ CONSTRAINT uq_employees_user UNIQUE (user_id)
+);
+CREATE INDEX idx_employees_org_status ON employees(organization_id, employment_status);
+CREATE INDEX idx_employees_branch ON employees(branch_id);
+CREATE INDEX idx_employees_department ON employees(department_id);
+ALTER TABLE housekeeping_tasks ADD assigned_employee_id UUID REFERENCES employees(id);
+ALTER TABLE maintenance_requests ADD assigned_employee_id UUID REFERENCES employees(id);
+INSERT INTO capabilities(capability_key, description) VALUES
+ ('HOUSEKEEPING_READ','Read housekeeping work'),('HOUSEKEEPING_UPDATE','Update housekeeping work'),('HOUSEKEEPING_ASSIGN','Assign housekeeping work'),
+ ('MAINTENANCE_READ','Read maintenance work'),('MAINTENANCE_UPDATE','Update maintenance work'),('MAINTENANCE_ASSIGN','Assign maintenance work'),
+ ('EMPLOYEE_READ','Read employee records'),('EMPLOYEE_CREATE','Create employee records'),('EMPLOYEE_UPDATE','Update employee records');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('SUPER_ADMIN','HOUSEKEEPING_READ'),('SUPER_ADMIN','HOUSEKEEPING_UPDATE'),('SUPER_ADMIN','HOUSEKEEPING_ASSIGN'),
+ ('SUPER_ADMIN','MAINTENANCE_READ'),('SUPER_ADMIN','MAINTENANCE_UPDATE'),('SUPER_ADMIN','MAINTENANCE_ASSIGN'),
+ ('HOUSEKEEPING_MANAGER','HOUSEKEEPING_READ'),('HOUSEKEEPING_MANAGER','HOUSEKEEPING_UPDATE'),('HOUSEKEEPING_MANAGER','HOUSEKEEPING_ASSIGN'),
+ ('HOUSEKEEPING_STAFF','HOUSEKEEPING_READ'),('HOUSEKEEPING_STAFF','HOUSEKEEPING_UPDATE'),
+ ('MAINTENANCE_MANAGER','MAINTENANCE_READ'),('MAINTENANCE_MANAGER','MAINTENANCE_UPDATE'),('MAINTENANCE_MANAGER','MAINTENANCE_ASSIGN'),
+ ('MAINTENANCE_STAFF','MAINTENANCE_READ'),('MAINTENANCE_STAFF','MAINTENANCE_UPDATE'),
+ ('HR_MANAGER','EMPLOYEE_READ'),('HR_MANAGER','EMPLOYEE_CREATE'),('HR_MANAGER','EMPLOYEE_UPDATE');
+CREATE TABLE restaurants (
+ id UUID PRIMARY KEY, branch_id UUID NOT NULL, name VARCHAR(150) NOT NULL, description VARCHAR(100000),
+ opening_time TIME, closing_time TIME, is_active BOOLEAN NOT NULL,
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_restaurants_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
+ CONSTRAINT uq_restaurants_branch_name UNIQUE (branch_id, name)
+);
+CREATE INDEX idx_restaurants_branch ON restaurants(branch_id);
+CREATE TABLE restaurant_tables (
+ id UUID PRIMARY KEY, restaurant_id UUID NOT NULL, table_number VARCHAR(50) NOT NULL, capacity INTEGER NOT NULL,
+ location VARCHAR(120), status VARCHAR(30) NOT NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_restaurant_tables_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
+ CONSTRAINT uq_restaurant_tables_number UNIQUE (restaurant_id, table_number), CONSTRAINT ck_restaurant_tables_capacity CHECK (capacity > 0)
+);
+CREATE INDEX idx_restaurant_tables_restaurant ON restaurant_tables(restaurant_id);
+INSERT INTO capabilities(capability_key, description) VALUES
+ ('RESTAURANT_READ','Read restaurants'),('RESTAURANT_CREATE','Create restaurants'),('RESTAURANT_UPDATE','Update restaurants'),
+ ('RESTAURANT_TABLE_READ','Read restaurant tables'),('RESTAURANT_TABLE_CREATE','Create restaurant tables'),
+ ('RESTAURANT_TABLE_UPDATE','Update restaurant tables'),('RESTAURANT_TABLE_STATUS_UPDATE','Change restaurant table status');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('SUPER_ADMIN','RESTAURANT_READ'),('SUPER_ADMIN','RESTAURANT_CREATE'),('SUPER_ADMIN','RESTAURANT_UPDATE'),
+ ('SUPER_ADMIN','RESTAURANT_TABLE_READ'),('SUPER_ADMIN','RESTAURANT_TABLE_CREATE'),('SUPER_ADMIN','RESTAURANT_TABLE_UPDATE'),('SUPER_ADMIN','RESTAURANT_TABLE_STATUS_UPDATE'),
+ ('RESTAURANT_MANAGER','RESTAURANT_READ'),('RESTAURANT_MANAGER','RESTAURANT_CREATE'),('RESTAURANT_MANAGER','RESTAURANT_UPDATE'),
+ ('RESTAURANT_MANAGER','RESTAURANT_TABLE_READ'),('RESTAURANT_MANAGER','RESTAURANT_TABLE_CREATE'),('RESTAURANT_MANAGER','RESTAURANT_TABLE_UPDATE'),('RESTAURANT_MANAGER','RESTAURANT_TABLE_STATUS_UPDATE'),
+ ('BRANCH_MANAGER','RESTAURANT_READ'),('BRANCH_MANAGER','RESTAURANT_CREATE'),('BRANCH_MANAGER','RESTAURANT_UPDATE'),
+ ('BRANCH_MANAGER','RESTAURANT_TABLE_READ'),('BRANCH_MANAGER','RESTAURANT_TABLE_CREATE'),('BRANCH_MANAGER','RESTAURANT_TABLE_UPDATE'),('BRANCH_MANAGER','RESTAURANT_TABLE_STATUS_UPDATE');
+CREATE TABLE menu_categories (
+ id UUID PRIMARY KEY, restaurant_id UUID NOT NULL, name VARCHAR(120) NOT NULL, description TEXT,
+ display_order INTEGER NOT NULL, is_active BOOLEAN NOT NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_menu_categories_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
+ CONSTRAINT uq_menu_categories_restaurant_id UNIQUE (restaurant_id, id),
+ CONSTRAINT uq_menu_categories_restaurant_name UNIQUE (restaurant_id, name)
+);
+CREATE INDEX idx_menu_categories_restaurant ON menu_categories(restaurant_id, display_order);
+CREATE TABLE menu_items (
+ id UUID PRIMARY KEY, restaurant_id UUID NOT NULL, category_id UUID NOT NULL, name VARCHAR(150) NOT NULL,
+ sku VARCHAR(50) NOT NULL, description TEXT, selling_price NUMERIC(12,2) NOT NULL, tax_rate NUMERIC(5,2) NOT NULL,
+ preparation_time_minutes INTEGER NOT NULL, available BOOLEAN NOT NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_menu_items_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
+ CONSTRAINT fk_menu_items_category_scope FOREIGN KEY (restaurant_id, category_id) REFERENCES menu_categories(restaurant_id, id),
+ CONSTRAINT uq_menu_items_restaurant_sku UNIQUE (restaurant_id, sku),
+ CONSTRAINT ck_menu_items_price CHECK (selling_price >= 0),
+ CONSTRAINT ck_menu_items_tax_rate CHECK (tax_rate BETWEEN 0 AND 100),
+ CONSTRAINT ck_menu_items_preparation_time CHECK (preparation_time_minutes >= 0)
+);
+CREATE INDEX idx_menu_items_category ON menu_items(category_id);
+INSERT INTO capabilities(capability_key, description) VALUES
+ ('MENU_READ','Read restaurant menus'),('MENU_CREATE','Create restaurant menu entries'),('MENU_UPDATE','Update restaurant menu entries');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('SUPER_ADMIN','MENU_READ'),('SUPER_ADMIN','MENU_CREATE'),('SUPER_ADMIN','MENU_UPDATE'),
+ ('RESTAURANT_MANAGER','MENU_READ'),('RESTAURANT_MANAGER','MENU_CREATE'),('RESTAURANT_MANAGER','MENU_UPDATE');
