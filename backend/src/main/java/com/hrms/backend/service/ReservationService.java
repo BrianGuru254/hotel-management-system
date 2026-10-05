@@ -15,6 +15,8 @@ import com.hrms.backend.entity.ReservationStatus;
 import com.hrms.backend.entity.ReservationStatusHistory;
 import com.hrms.backend.entity.Room;
 import com.hrms.backend.entity.RoomType;
+import com.hrms.backend.entity.RoomStatus;
+import com.hrms.backend.entity.StayStatus;
 import com.hrms.backend.exception.InvalidRelationshipException;
 import com.hrms.backend.exception.ResourceNotFoundException;
 import com.hrms.backend.repository.GuestRepository;
@@ -24,6 +26,7 @@ import com.hrms.backend.repository.ReservationRepository;
 import com.hrms.backend.repository.ReservationStatusHistoryRepository;
 import com.hrms.backend.repository.RoomRepository;
 import com.hrms.backend.repository.RoomTypeRepository;
+import com.hrms.backend.repository.StayRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -48,12 +51,15 @@ public class ReservationService {
             "reservationNumber", "checkInDate", "checkOutDate", "status", "nightlyRate", "createdAt");
     private static final List<ReservationStatus> ACTIVE_STATUSES = List.of(
             ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_IN);
+    private static final List<RoomStatus> UNAVAILABLE_ROOM_STATUSES = List.of(
+            RoomStatus.MAINTENANCE, RoomStatus.OUT_OF_ORDER);
 
     private final ReservationRepository reservations;
     private final ReservationStatusHistoryRepository statusHistories;
     private final PropertyRepository properties;
     private final GuestRepository guests;
     private final RoomTypeRepository roomTypes;
+    private final StayRepository stays;
     private final RoomRepository rooms;
     private final HmsUserRepository users;
     private final PropertyVisibilityService propertyVisibility;
@@ -64,6 +70,7 @@ public class ReservationService {
                               PropertyRepository properties,
                               GuestRepository guests,
                               RoomTypeRepository roomTypes,
+                              StayRepository stays,
                               RoomRepository rooms,
                               HmsUserRepository users,
                               PropertyVisibilityService propertyVisibility,
@@ -73,6 +80,7 @@ public class ReservationService {
         this.properties = properties;
         this.guests = guests;
         this.roomTypes = roomTypes;
+        this.stays = stays;
         this.rooms = rooms;
         this.users = users;
         this.propertyVisibility = propertyVisibility;
@@ -152,9 +160,11 @@ public class ReservationService {
         // Lock room type row to prevent race conditions during room type availability allocation
         roomTypes.findByIdForUpdate(roomType.getId());
 
-        long totalRoomsForType = rooms.countByPropertyIdAndRoomTypeId(property.getId(), roomType.getId());
-        long alreadyReserved = reservations.countReservedRooms(property.getId(), roomType.getId(),
-                ACTIVE_STATUSES, request.checkInDate(), request.checkOutDate());
+        roomTypes.findByIdForUpdate(roomType.getId());
+        long totalRoomsForType = rooms.countByPropertyIdAndRoomTypeIdAndCurrentStatusNotIn(
+                property.getId(), roomType.getId(), UNAVAILABLE_ROOM_STATUSES);
+        long alreadyReserved = countAllocatedRooms(property.getId(), roomType.getId(), null,
+                request.checkInDate(), request.checkOutDate());
         if (totalRoomsForType - alreadyReserved < numberOfRooms) {
             throw new InvalidRelationshipException("Insufficient room availability for the requested room type and dates");
         }
@@ -241,9 +251,11 @@ public class ReservationService {
                     + maxCapacity + ") for the selected room(s)");
         }
 
-        long totalRoomsForType = rooms.countByPropertyIdAndRoomTypeId(property.getId(), reservation.getRoomType().getId());
-        long alreadyReserved = reservations.countReservedRoomsExcluding(property.getId(), reservation.getRoomType().getId(),
-                reservation.getId(), ACTIVE_STATUSES, request.checkInDate(), request.checkOutDate());
+        roomTypes.findByIdForUpdate(reservation.getRoomType().getId());
+        long totalRoomsForType = rooms.countByPropertyIdAndRoomTypeIdAndCurrentStatusNotIn(
+                property.getId(), reservation.getRoomType().getId(), UNAVAILABLE_ROOM_STATUSES);
+        long alreadyReserved = countAllocatedRooms(property.getId(), reservation.getRoomType().getId(),
+                reservation.getId(), request.checkInDate(), request.checkOutDate());
         if (totalRoomsForType - alreadyReserved < numberOfRooms) {
             throw new InvalidRelationshipException("Insufficient room availability for the updated dates");
         }
@@ -339,9 +351,10 @@ public class ReservationService {
             throw new InvalidRelationshipException("Room type does not belong to the specified property");
         }
 
-        long totalRooms = rooms.countByPropertyIdAndRoomTypeId(property.getId(), roomType.getId());
-        long reservedRooms = reservations.countReservedRooms(property.getId(), roomType.getId(),
-                ACTIVE_STATUSES, request.checkInDate(), request.checkOutDate());
+        long totalRooms = rooms.countByPropertyIdAndRoomTypeIdAndCurrentStatusNotIn(
+                property.getId(), roomType.getId(), UNAVAILABLE_ROOM_STATUSES);
+        long reservedRooms = countAllocatedRooms(property.getId(), roomType.getId(), null,
+                request.checkInDate(), request.checkOutDate());
 
         int availableRooms = (int) Math.max(0, totalRooms - reservedRooms);
         int requestedRooms = request.numberOfRooms() == null ? 1 : request.numberOfRooms();
@@ -399,6 +412,16 @@ public class ReservationService {
     private void authorize(String capability, Property property) {
         authorization.requireCapability(capability, property.getOrganization().getId(),
                 property.getBranch().getId(), property.getId(), null);
+    }
+
+    private long countAllocatedRooms(UUID propertyId, UUID roomTypeId, UUID excludedReservationId,
+                                     LocalDate checkInDate, LocalDate checkOutDate) {
+        long reservationCount = excludedReservationId == null
+                ? reservations.countReservedRooms(propertyId, roomTypeId, ACTIVE_STATUSES, checkInDate, checkOutDate)
+                : reservations.countReservedRoomsExcluding(propertyId, roomTypeId, excludedReservationId,
+                        ACTIVE_STATUSES, checkInDate, checkOutDate);
+        return reservationCount + stays.countActiveWalkInRoomsByPropertyAndRoomType(
+                propertyId, roomTypeId, StayStatus.ACTIVE, checkInDate);
     }
 
     private HmsUser getCurrentUser() {

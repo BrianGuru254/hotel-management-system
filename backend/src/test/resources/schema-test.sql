@@ -227,6 +227,100 @@ CREATE TABLE reservation_status_history (
 );
 CREATE INDEX idx_reservation_history_property_reservation ON reservation_status_history(property_id, reservation_id, changed_at);
 
+CREATE TABLE stays (
+ id UUID PRIMARY KEY,
+ property_id UUID NOT NULL,
+ stay_number VARCHAR(50) NOT NULL,
+ reservation_id UUID,
+ guest_id UUID NOT NULL,
+ room_id UUID NOT NULL,
+ active_room_id UUID,
+ actual_check_in TIMESTAMP WITH TIME ZONE NOT NULL,
+ expected_check_out_date DATE NOT NULL,
+ actual_check_out TIMESTAMP WITH TIME ZONE,
+ adults INTEGER NOT NULL DEFAULT 1,
+ children INTEGER NOT NULL DEFAULT 0,
+ nightly_rate NUMERIC(12,2) NOT NULL,
+ deposit_amount NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+ currency_code CHAR(3) NOT NULL,
+ status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+ notes TEXT,
+ checkout_notes TEXT,
+ checked_in_by UUID NOT NULL,
+ checked_out_by UUID,
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_stays_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_stays_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(id),
+ CONSTRAINT fk_stays_reservation_scope FOREIGN KEY (property_id, reservation_id) REFERENCES reservations(property_id, id),
+ CONSTRAINT fk_stays_guest FOREIGN KEY (guest_id) REFERENCES guests(id),
+ CONSTRAINT fk_stays_guest_scope FOREIGN KEY (property_id, guest_id) REFERENCES guests(property_id, id),
+ CONSTRAINT fk_stays_room FOREIGN KEY (room_id) REFERENCES rooms(id),
+ CONSTRAINT fk_stays_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+ CONSTRAINT fk_stays_active_room FOREIGN KEY (active_room_id) REFERENCES rooms(id),
+ CONSTRAINT fk_stays_checked_in_by FOREIGN KEY (checked_in_by) REFERENCES users(id),
+ CONSTRAINT fk_stays_checked_out_by FOREIGN KEY (checked_out_by) REFERENCES users(id),
+ CONSTRAINT uq_stays_property_scope UNIQUE (property_id, id),
+ CONSTRAINT uq_stays_active_room UNIQUE (active_room_id),
+ CONSTRAINT ck_stays_adults CHECK (adults > 0),
+ CONSTRAINT ck_stays_children CHECK (children >= 0),
+ CONSTRAINT ck_stays_nightly_rate CHECK (nightly_rate >= 0),
+ CONSTRAINT ck_stays_deposit CHECK (deposit_amount >= 0),
+ CONSTRAINT ck_stays_status CHECK (status IN ('ACTIVE', 'CHECKED_OUT', 'CANCELLED')),
+ CONSTRAINT ck_stays_room_occupancy CHECK (
+  (status = 'ACTIVE' AND active_room_id = room_id AND actual_check_out IS NULL) OR
+  (status = 'CHECKED_OUT' AND active_room_id IS NULL AND actual_check_out IS NOT NULL) OR
+  (status = 'CANCELLED' AND active_room_id IS NULL)
+ )
+);
+CREATE INDEX idx_stays_property_status ON stays(property_id, status);
+CREATE INDEX idx_stays_property_checkout ON stays(property_id, expected_check_out_date);
+CREATE INDEX idx_stays_guest_id ON stays(guest_id);
+CREATE INDEX idx_stays_room_id ON stays(room_id);
+CREATE INDEX idx_stays_property_reservation ON stays(property_id, reservation_id);
+CREATE UNIQUE INDEX uq_stays_property_number_ci ON stays(property_id, stay_number);
+
+CREATE TABLE stay_guests (
+ id UUID PRIMARY KEY,
+ property_id UUID NOT NULL,
+ stay_id UUID NOT NULL,
+ guest_id UUID NOT NULL,
+ is_primary_guest BOOLEAN NOT NULL DEFAULT FALSE,
+ primary_stay_id UUID,
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_stay_guests_stay FOREIGN KEY (stay_id) REFERENCES stays(id) ON DELETE CASCADE,
+ CONSTRAINT fk_stay_guests_stay_scope FOREIGN KEY (property_id, stay_id) REFERENCES stays(property_id, id) ON DELETE CASCADE,
+ CONSTRAINT fk_stay_guests_guest FOREIGN KEY (guest_id) REFERENCES guests(id),
+ CONSTRAINT fk_stay_guests_guest_scope FOREIGN KEY (property_id, guest_id) REFERENCES guests(property_id, id),
+ CONSTRAINT fk_stay_guests_primary_stay FOREIGN KEY (primary_stay_id) REFERENCES stays(id) ON DELETE CASCADE,
+ CONSTRAINT uq_stay_guests_stay_guest UNIQUE (stay_id, guest_id),
+ CONSTRAINT uq_stay_guests_primary UNIQUE (primary_stay_id),
+ CONSTRAINT ck_stay_guests_primary CHECK (
+  (is_primary_guest = TRUE AND primary_stay_id = stay_id) OR
+  (is_primary_guest = FALSE AND primary_stay_id IS NULL)
+ )
+);
+CREATE INDEX idx_stay_guests_property_stay ON stay_guests(property_id, stay_id);
+CREATE INDEX idx_stay_guests_guest_id ON stay_guests(guest_id);
+
+CREATE TABLE stay_status_history (
+ id UUID PRIMARY KEY,
+ property_id UUID NOT NULL,
+ stay_id UUID NOT NULL,
+ previous_status VARCHAR(30),
+ new_status VARCHAR(30) NOT NULL,
+ reason TEXT,
+ changed_by UUID NOT NULL,
+ changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_stay_history_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_stay_history_stay FOREIGN KEY (stay_id) REFERENCES stays(id) ON DELETE CASCADE,
+ CONSTRAINT fk_stay_history_stay_scope FOREIGN KEY (property_id, stay_id) REFERENCES stays(property_id, id) ON DELETE CASCADE,
+ CONSTRAINT fk_stay_history_user FOREIGN KEY (changed_by) REFERENCES users(id),
+ CONSTRAINT ck_stay_history_previous_status CHECK (previous_status IS NULL OR previous_status IN ('ACTIVE', 'CHECKED_OUT', 'CANCELLED')),
+ CONSTRAINT ck_stay_history_new_status CHECK (new_status IN ('ACTIVE', 'CHECKED_OUT', 'CANCELLED'))
+);
+CREATE INDEX idx_stay_history_property_stay ON stay_status_history(property_id, stay_id, changed_at);
+
 
 INSERT INTO roles(role_key, display_name, description, created_at, updated_at)
 VALUES
@@ -263,7 +357,10 @@ INSERT INTO capabilities(capability_key, description) VALUES
  ('DEPARTMENT_READ','Read departments'), ('DEPARTMENT_CREATE','Create departments'), ('DEPARTMENT_UPDATE','Update departments'), ('DEPARTMENT_DELETE','Delete departments'),
  ('USER_MANAGE','Manage users'), ('ROLE_READ','Read roles'), ('PROFILE_READ','Read profile'), ('PROFILE_UPDATE','Update profile'), ('PASSWORD_CHANGE','Change password'),
  ('REPORT_READ','Read reports'), ('AUDIT_READ','Read audit records'), ('SECURITY_MANAGE','Manage security'),
- ('RESERVATION_READ','Read reservations'), ('RESERVATION_CREATE','Create reservations'), ('RESERVATION_UPDATE','Update pending reservations'), ('RESERVATION_CONFIRM','Confirm reservations'), ('RESERVATION_CANCEL','Cancel reservations'), ('RESERVATION_AVAILABILITY_READ','Check reservation availability'), ('RESERVATION_HISTORY_READ','Read reservation status history');
+ ('RESERVATION_READ','Read reservations'), ('RESERVATION_CREATE','Create reservations'), ('RESERVATION_UPDATE','Update pending reservations'), ('RESERVATION_CONFIRM','Confirm reservations'), ('RESERVATION_CANCEL','Cancel reservations'), ('RESERVATION_AVAILABILITY_READ','Check reservation availability'), ('RESERVATION_HISTORY_READ','Read reservation status history'),
+ ('STAY_READ','Read stays'), ('STAY_HISTORY_READ','Read stay status history'), ('STAY_GUEST_MANAGE','Manage guests assigned to a stay'),
+ ('CHECK_IN','Check in a reservation'), ('WALK_IN_CHECK_IN','Check in a guest without a reservation'),
+ ('CHECK_OUT','Check out an active stay'), ('CHECKOUT_PREVIEW_READ','Read estimated checkout balance');
 
 INSERT INTO role_capabilities(role_key, capability_key)
 SELECT 'SUPER_ADMIN', capability_key FROM capabilities;
@@ -303,4 +400,10 @@ INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('FRONT_DESK','RESERVATION_READ'),('FRONT_DESK','RESERVATION_CREATE'),('FRONT_DESK','RESERVATION_UPDATE'),('FRONT_DESK','RESERVATION_CONFIRM'),('FRONT_DESK','RESERVATION_CANCEL'),('FRONT_DESK','RESERVATION_AVAILABILITY_READ'),('FRONT_DESK','RESERVATION_HISTORY_READ'),
  ('RESERVATIONS_AGENT','RESERVATION_READ'),('RESERVATIONS_AGENT','RESERVATION_CREATE'),('RESERVATIONS_AGENT','RESERVATION_UPDATE'),('RESERVATIONS_AGENT','RESERVATION_CONFIRM'),('RESERVATIONS_AGENT','RESERVATION_CANCEL'),('RESERVATIONS_AGENT','RESERVATION_AVAILABILITY_READ'),('RESERVATIONS_AGENT','RESERVATION_HISTORY_READ'),
  ('REPORTING_USER','RESERVATION_READ'),('REPORTING_USER','RESERVATION_AVAILABILITY_READ'),('REPORTING_USER','RESERVATION_HISTORY_READ');
-
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('ORGANIZATION_ADMIN','STAY_READ'),('ORGANIZATION_ADMIN','STAY_HISTORY_READ'),('ORGANIZATION_ADMIN','STAY_GUEST_MANAGE'),('ORGANIZATION_ADMIN','CHECK_IN'),('ORGANIZATION_ADMIN','WALK_IN_CHECK_IN'),('ORGANIZATION_ADMIN','CHECK_OUT'),('ORGANIZATION_ADMIN','CHECKOUT_PREVIEW_READ'),
+ ('BRANCH_MANAGER','STAY_READ'),('BRANCH_MANAGER','STAY_HISTORY_READ'),('BRANCH_MANAGER','STAY_GUEST_MANAGE'),('BRANCH_MANAGER','CHECK_IN'),('BRANCH_MANAGER','WALK_IN_CHECK_IN'),('BRANCH_MANAGER','CHECK_OUT'),('BRANCH_MANAGER','CHECKOUT_PREVIEW_READ'),
+ ('PROPERTY_MANAGER','STAY_READ'),('PROPERTY_MANAGER','STAY_HISTORY_READ'),('PROPERTY_MANAGER','STAY_GUEST_MANAGE'),('PROPERTY_MANAGER','CHECK_IN'),('PROPERTY_MANAGER','WALK_IN_CHECK_IN'),('PROPERTY_MANAGER','CHECK_OUT'),('PROPERTY_MANAGER','CHECKOUT_PREVIEW_READ'),
+ ('FRONT_DESK','STAY_READ'),('FRONT_DESK','STAY_HISTORY_READ'),('FRONT_DESK','STAY_GUEST_MANAGE'),('FRONT_DESK','CHECK_IN'),('FRONT_DESK','WALK_IN_CHECK_IN'),('FRONT_DESK','CHECK_OUT'),('FRONT_DESK','CHECKOUT_PREVIEW_READ'),
+ ('RESERVATIONS_AGENT','STAY_READ'),('RESERVATIONS_AGENT','STAY_HISTORY_READ'),('RESERVATIONS_AGENT','STAY_GUEST_MANAGE'),('RESERVATIONS_AGENT','CHECK_IN'),('RESERVATIONS_AGENT','WALK_IN_CHECK_IN'),('RESERVATIONS_AGENT','CHECK_OUT'),('RESERVATIONS_AGENT','CHECKOUT_PREVIEW_READ'),
+ ('REPORTING_USER','STAY_READ'),('REPORTING_USER','STAY_HISTORY_READ'),('REPORTING_USER','CHECKOUT_PREVIEW_READ');
