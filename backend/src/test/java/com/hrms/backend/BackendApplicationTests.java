@@ -21,6 +21,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.HashMap;
@@ -52,6 +54,9 @@ class BackendApplicationTests {
 
 	@BeforeEach
 	void resetTestData() {
+		jdbc.update("DELETE FROM stay_status_history");
+		jdbc.update("DELETE FROM stay_guests");
+		jdbc.update("DELETE FROM stays");
 		jdbc.update("DELETE FROM reservation_status_history");
 		jdbc.update("DELETE FROM reservations");
 		jdbc.update("DELETE FROM refresh_tokens");
@@ -545,6 +550,173 @@ class BackendApplicationTests {
 		String histBody = histResult.getResponse().getContentAsString();
 		int histCount = mapper.readTree(histBody).size();
 		assertTrue(histCount >= 2, "Should have at least 2 status history entries (PENDING→CONFIRMED, CONFIRMED→CANCELLED)");
+	}
+
+	@Test
+	void stayCheckInCheckOutAndWalkInRespectPropertyScopeAndRoomInventory() throws Exception {
+		String rootToken = bootstrap().accessToken();
+		String organizationId = createOrganization(rootToken, "Stay Organization");
+		String branchId = createBranch(rootToken, organizationId, "STAY-BR");
+		String propertyA = createProperty(rootToken, organizationId, branchId, "STAY-A");
+		String propertyB = createProperty(rootToken, organizationId, branchId, "STAY-B");
+		String roomTypeId = createRoomType(rootToken, propertyA, "Stay Standard", "STY-STD");
+		String roomA1 = createRoom(rootToken, propertyA, roomTypeId, "301", 2);
+		String roomA2 = createRoom(rootToken, propertyA, roomTypeId, "302", 2);
+		String guestA = createGuest(rootToken, propertyA, "Stay Guest", "STAY-GUEST-A");
+		String guestA2 = createGuest(rootToken, propertyA, "Additional Guest", "STAY-GUEST-A2");
+		String guestB = createGuest(rootToken, propertyB, "Other Property Guest", "STAY-GUEST-B");
+		LocalDate today = LocalDate.now(ZoneId.of("Africa/Nairobi"));
+		LocalDate checkOutDate = today.plusDays(2);
+
+		Map<String, Object> reservationRequest = new HashMap<>();
+		reservationRequest.put("propertyId", propertyA);
+		reservationRequest.put("guestId", guestA);
+		reservationRequest.put("roomTypeId", roomTypeId);
+		reservationRequest.put("roomId", roomA1);
+		reservationRequest.put("checkInDate", today.toString());
+		reservationRequest.put("checkOutDate", checkOutDate.toString());
+		reservationRequest.put("adults", 2);
+		reservationRequest.put("children", 0);
+		reservationRequest.put("numberOfRooms", 1);
+		reservationRequest.put("nightlyRate", 150.00);
+		reservationRequest.put("depositAmount", 75.00);
+		MvcResult reservationResult = mvc.perform(post("/api/v1/reservations")
+				.header("Authorization", bearer(rootToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(reservationRequest)))
+			.andExpect(status().isCreated()).andReturn();
+		String reservationId = mapper.readTree(reservationResult.getResponse().getContentAsString()).get("id").asText();
+		mvc.perform(patch("/api/v1/reservations/" + reservationId + "/confirm")
+				.header("Authorization", bearer(rootToken))).andExpect(status().isOk());
+
+		createScopedUser(rootToken, "staydesk.a@example.test", "FRONT_DESK", "PROPERTY",
+				organizationId, branchId, propertyA, null);
+		createScopedUser(rootToken, "staydesk.b@example.test", "FRONT_DESK", "PROPERTY",
+				organizationId, branchId, propertyB, null);
+		String deskA = login("staydesk.a@example.test");
+		String deskB = login("staydesk.b@example.test");
+
+		MvcResult checkInResult = mvc.perform(post("/api/v1/check-ins")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("reservationId", reservationId, "roomId", roomA1))))
+			.andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("ACTIVE"))
+			.andExpect(jsonPath("$.guestId").value(guestA)).andReturn();
+		String stayId = mapper.readTree(checkInResult.getResponse().getContentAsString()).get("id").asText();
+		mvc.perform(get("/api/v1/rooms/" + roomA1).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.currentStatus").value("OCCUPIED"));
+		mvc.perform(get("/api/v1/reservations/" + reservationId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CHECKED_IN"));
+		mvc.perform(get("/api/v1/stays/" + stayId).header("Authorization", bearer(deskB)))
+			.andExpect(status().isForbidden());
+		mvc.perform(post("/api/v1/stays/" + stayId + "/guests")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("guestId", guestA2, "isPrimaryGuest", false))))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.guests.length()").value(2));
+		mvc.perform(post("/api/v1/stays/" + stayId + "/guests")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("guestId", guestA2, "isPrimaryGuest", true))))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.guestId").value(guestA2));
+		mvc.perform(post("/api/v1/stays/" + stayId + "/guests")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("guestId", guestB, "isPrimaryGuest", false))))
+			.andExpect(status().isUnprocessableEntity());
+
+		MvcResult reservedAvailability = mvc.perform(post("/api/v1/reservations/check-availability")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "roomTypeId", roomTypeId,
+						"checkInDate", today.plusDays(1).toString(), "checkOutDate", checkOutDate.toString(),
+						"numberOfRooms", 2))))
+			.andExpect(status().isOk()).andReturn();
+		assertFalse(mapper.readTree(reservedAvailability.getResponse().getContentAsString()).get("available").asBoolean());
+
+		MvcResult preview = mvc.perform(get("/api/v1/check-outs/" + stayId + "/preview")
+				.header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andReturn();
+		assertEquals(300.00, mapper.readTree(preview.getResponse().getContentAsString())
+				.get("accommodationEstimate").decimalValue().doubleValue(), 0.01);
+		mvc.perform(post("/api/v1/check-outs/" + stayId).header("Authorization", bearer(deskA))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"notes\":\"Key returned\"}"))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CHECKED_OUT"))
+			.andExpect(jsonPath("$.checkoutNotes").value("Key returned"));
+		mvc.perform(get("/api/v1/rooms/" + roomA1).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.currentStatus").value("DIRTY"));
+		mvc.perform(get("/api/v1/reservations/" + reservationId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+		mvc.perform(get("/api/v1/stays/" + stayId + "/history").header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$[1].newStatus").value("CHECKED_OUT"));
+		mvc.perform(post("/api/v1/check-outs/" + stayId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isUnprocessableEntity());
+		mvc.perform(patch("/api/v1/rooms/" + roomA1 + "/status").header("Authorization", bearer(rootToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"AVAILABLE\"}"))
+			.andExpect(status().isOk());
+
+		Map<String, Object> groupReservationRequest = new HashMap<>();
+		groupReservationRequest.put("propertyId", propertyA);
+		groupReservationRequest.put("guestId", guestA);
+		groupReservationRequest.put("roomTypeId", roomTypeId);
+		groupReservationRequest.put("checkInDate", today.plusDays(1).toString());
+		groupReservationRequest.put("checkOutDate", today.plusDays(4).toString());
+		groupReservationRequest.put("adults", 2);
+		groupReservationRequest.put("children", 0);
+		groupReservationRequest.put("numberOfRooms", 2);
+		groupReservationRequest.put("nightlyRate", 150.00);
+		MvcResult groupReservationResult = mvc.perform(post("/api/v1/reservations")
+				.header("Authorization", bearer(rootToken)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(groupReservationRequest)))
+			.andExpect(status().isCreated()).andReturn();
+		String groupReservationId = mapper.readTree(groupReservationResult.getResponse().getContentAsString()).get("id").asText();
+		mvc.perform(patch("/api/v1/reservations/" + groupReservationId + "/confirm")
+				.header("Authorization", bearer(rootToken))).andExpect(status().isOk());
+		MvcResult firstRoomCheckIn = mvc.perform(post("/api/v1/check-ins")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("reservationId", groupReservationId, "roomId", roomA1))))
+			.andExpect(status().isCreated()).andReturn();
+		MvcResult secondRoomCheckIn = mvc.perform(post("/api/v1/check-ins")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("reservationId", groupReservationId, "roomId", roomA2))))
+			.andExpect(status().isCreated()).andReturn();
+		String firstGroupStayId = mapper.readTree(firstRoomCheckIn.getResponse().getContentAsString()).get("id").asText();
+		String secondGroupStayId = mapper.readTree(secondRoomCheckIn.getResponse().getContentAsString()).get("id").asText();
+		mvc.perform(post("/api/v1/check-outs/" + firstGroupStayId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/v1/reservations/" + groupReservationId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CHECKED_IN"));
+		mvc.perform(post("/api/v1/check-outs/" + secondGroupStayId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/v1/reservations/" + groupReservationId).header("Authorization", bearer(deskA)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+		mvc.perform(patch("/api/v1/rooms/" + roomA2 + "/status").header("Authorization", bearer(rootToken))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"AVAILABLE\"}"))
+			.andExpect(status().isOk());
+
+		Map<String, Object> walkInRequest = new HashMap<>();
+		walkInRequest.put("propertyId", propertyA);
+		walkInRequest.put("guestId", guestA2);
+		walkInRequest.put("roomId", roomA2);
+		walkInRequest.put("expectedCheckOutDate", today.plusDays(3).toString());
+		walkInRequest.put("adults", 1);
+		walkInRequest.put("children", 0);
+		walkInRequest.put("nightlyRate", 80.00);
+		MvcResult walkInResult = mvc.perform(post("/api/v1/check-ins")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(walkInRequest)))
+			.andExpect(status().isCreated()).andReturn();
+		var walkInJson = mapper.readTree(walkInResult.getResponse().getContentAsString());
+		assertTrue(walkInJson.get("reservationId").isNull());
+		String walkInStayId = walkInJson.get("id").asText();
+		MvcResult walkInAvailability = mvc.perform(post("/api/v1/reservations/check-availability")
+				.header("Authorization", bearer(deskA)).contentType(MediaType.APPLICATION_JSON)
+				.content(mapper.writeValueAsString(Map.of("propertyId", propertyA, "roomTypeId", roomTypeId,
+						"checkInDate", today.plusDays(1).toString(), "checkOutDate", today.plusDays(2).toString(),
+						"numberOfRooms", 2))))
+			.andExpect(status().isOk()).andReturn();
+		assertEquals(1, mapper.readTree(walkInAvailability.getResponse().getContentAsString()).get("availableRooms").asInt());
+		mvc.perform(post("/api/v1/check-ins").header("Authorization", bearer(deskA))
+				.contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(walkInRequest)))
+			.andExpect(status().isUnprocessableEntity());
+		mvc.perform(get("/api/v1/stays/active").header("Authorization", bearer(deskA)).param("propertyId", propertyA))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.content.length()").value(1));
+		mvc.perform(get("/api/v1/stays/" + walkInStayId).header("Authorization", bearer(deskB)))
+			.andExpect(status().isForbidden());
 	}
 
 	private Session bootstrap() throws Exception {

@@ -47,6 +47,8 @@ Room types, amenities, and rooms are property-owned. Catalog and room list queri
 
 Room inventory is property-owned and references a room type from that same property. The database uses composite property-scoped foreign keys for rooms and room-amenity assignments in addition to service validation. Housekeeping and maintenance receive status capabilities limited to their operational status group; reservation-aware availability belongs to the Reservations module.
 
+Reservations and Stays are also Property-scoped. Reservations reference a guest, room type, and optional room from that same property, and the database reinforces this with composite foreign keys. Check-in requires a confirmed reservation or an explicitly scoped walk-in; each active Stay locks one physical room. Guest assignments on a Stay are property-bound. Check-out moves the room to DIRTY and updates the reservation lifecycle. Checkout preview is an estimate from the saved nightly rate and deposit; payments, folios, and invoicing remain later Finance work. Stay checkout is stored as a local date to align with reservation dates, while actual check-in/out timestamps remain timezone-aware.
+
 ## Invariants
 
 1. Extend the observed Spring Boot backend; do not replace it with the older NestJS/Prisma proposal without an explicit architecture decision.

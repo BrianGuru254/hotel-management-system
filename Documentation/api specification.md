@@ -1115,6 +1115,8 @@ Request:
 GET /api/v1/stays
 ```
 
+Optional filters: `propertyId`, `status`, `guestId`, `roomId`, `checkOutFrom`, `checkOutTo`, `page`, `size`, `sort`, and `direction`. The response is paginated and restricted to the caller's live property scope.
+
 ## Get Stay
 
 ```http
@@ -1126,6 +1128,8 @@ GET /api/v1/stays/{id}
 ```http
 GET /api/v1/stays/active
 ```
+
+Returns active stays only, within the requested property filter and the caller's live scope.
 
 ## Add Guest to Stay
 
@@ -1141,6 +1145,16 @@ Request:
   "isPrimaryGuest": false
 }
 ```
+
+Each guest profile must belong to the Stay's Property. A Stay can have one primary guest; an existing assigned guest can be promoted by repeating the request with `isPrimaryGuest: true`. Guest assignments cannot exceed the room capacity.
+
+## Stay History
+
+```http
+GET /api/v1/stays/{id}/history
+```
+
+Returns the Stay's status transition history.
 
 ---
 
@@ -1158,19 +1172,23 @@ Request:
 {
   "reservationId": "UUID",
   "roomId": "UUID",
-  "depositAmount": 5000,
+  "adults": 2,
+  "children": 0,
   "notes": "Guest arrived early"
 }
 ```
 
+`reservationId` must identify a CONFIRMED reservation or a partially checked-in reservation at a Property in the caller's scope. The request selects one physical room; a multi-room reservation is checked in one room per request. If the reservation has an assigned room, that room must be used. Guest, dates, nightly rate, and deposit are taken from the reservation.
+
+Walk-in check-in omits `reservationId` and supplies `propertyId`, `guestId`, `roomId`, `expectedCheckOutDate`, and `nightlyRate`; `adults`, `children`, and `notes` are optional. The guest and room must both belong to the supplied Property.
+
 The backend shall:
 
-1. Validate reservation.
-2. Validate room.
-3. Verify availability.
-4. Create stay.
-5. Update room status.
-6. Record check-in user.
+1. Validate the reservation or walk-in request and all Property relationships.
+2. Lock and verify the selected room is available, has no overlapping reservation, and can hold the party.
+3. Create the active Stay and its primary guest assignment.
+4. Mark the room OCCUPIED and record the acting user and status history.
+5. For reservation check-in, transition the reservation to CHECKED_IN.
 
 ---
 
@@ -1185,15 +1203,17 @@ GET /api/v1/check-outs/{stayId}/preview
 Returns:
 
 ```text
-Accommodation
-Restaurant
-Room Service
-Other Charges
-Taxes
-Discounts
-Payments
-Outstanding Balance
+stayId
+stayNumber
+nights
+nightlyRate
+accommodationEstimate
+depositEstimate
+estimatedBalanceDue
+currencyCode
 ```
+
+This is an accommodation estimate only. Restaurant charges, taxes, payments, folios, and invoices are not part of the current Stay module.
 
 ## Check-Out
 
@@ -1205,25 +1225,12 @@ Request:
 
 ```json
 {
-  "paymentAmount": 25000,
-  "paymentMethod": "MOBILE_MONEY",
-  "transactionReference": "ABC123"
+  "notes": "Key returned",
+  "completeReservation": false
 }
 ```
 
-The operation shall:
-
-```text
-Calculate final bill
-↓
-Validate payment
-↓
-Close stay
-↓
-Update room
-↓
-Generate invoice
-```
+The operation closes an active Stay, records the check-out user, and marks the room DIRTY for housekeeping. A reservation is completed when all its checked-in rooms are checked out. Set `completeReservation: true` only when intentionally releasing any reserved rooms that never checked in; finalization is rejected while another room has an active Stay. Payment is not taken by this endpoint.
 
 ---
 

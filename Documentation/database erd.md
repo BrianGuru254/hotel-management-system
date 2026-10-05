@@ -816,49 +816,47 @@ NO_SHOW
 
 # 21. STAYS
 
-A reservation becomes an active stay during check-in.
+A reservation can create one Stay for each checked-in room. A Stay can also be created as a walk-in without a reservation. Stay, guest, room, and optional reservation all belong to the same Property.
 
 ## TABLE: stays
 
 ```sql
 CREATE TABLE stays (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    stay_number VARCHAR(50) NOT NULL UNIQUE,
-
-    reservation_id UUID UNIQUE
-        REFERENCES reservations(id),
-
-    guest_id UUID NOT NULL
-        REFERENCES guests(id),
-
-    room_id UUID NOT NULL
-        REFERENCES rooms(id),
-
-    actual_check_in TIMESTAMPTZ NOT NULL,
-
-    expected_check_out TIMESTAMPTZ NOT NULL,
-
+    property_id UUID NOT NULL REFERENCES properties(id),
+    stay_number VARCHAR(50) NOT NULL,
+    reservation_id UUID REFERENCES reservations(id),
+    guest_id UUID NOT NULL REFERENCES guests(id),
+    room_id UUID NOT NULL REFERENCES rooms(id),
+    active_room_id UUID UNIQUE REFERENCES rooms(id),
+    actual_check_in TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expected_check_out_date DATE NOT NULL,
     actual_check_out TIMESTAMPTZ,
-
     adults INTEGER NOT NULL DEFAULT 1,
-
     children INTEGER NOT NULL DEFAULT 0,
-
+    nightly_rate NUMERIC(12,2) NOT NULL,
+    deposit_amount NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    currency_code CHAR(3) NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
-
     notes TEXT,
-
-    checked_in_by UUID
-        REFERENCES users(id),
-
-    checked_out_by UUID
-        REFERENCES users(id),
-
+    checkout_notes TEXT,
+    checked_in_by UUID NOT NULL REFERENCES users(id),
+    checked_out_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (property_id, id),
+    FOREIGN KEY (property_id, reservation_id) REFERENCES reservations(property_id, id),
+    FOREIGN KEY (property_id, guest_id) REFERENCES guests(property_id, id),
+    FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+    CHECK (adults > 0 AND children >= 0),
+    CHECK (nightly_rate >= 0 AND deposit_amount >= 0),
+    CHECK (
+      (status = 'ACTIVE' AND active_room_id = room_id AND actual_check_out IS NULL) OR
+      (status = 'CHECKED_OUT' AND active_room_id IS NULL AND actual_check_out IS NOT NULL) OR
+      (status = 'CANCELLED' AND active_room_id IS NULL)
+    )
 );
+CREATE UNIQUE INDEX uq_stays_property_number_ci ON stays(property_id, lower(stay_number));
 ```
 
 Stay statuses:
@@ -877,17 +875,40 @@ Allows multiple guests to belong to one stay.
 
 ```sql
 CREATE TABLE stay_guests (
-    stay_id UUID NOT NULL
-        REFERENCES stays(id)
-        ON DELETE CASCADE,
-
-    guest_id UUID NOT NULL
-        REFERENCES guests(id)
-        ON DELETE CASCADE,
-
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    property_id UUID NOT NULL,
+    stay_id UUID NOT NULL REFERENCES stays(id) ON DELETE CASCADE,
+    guest_id UUID NOT NULL REFERENCES guests(id),
     is_primary_guest BOOLEAN NOT NULL DEFAULT FALSE,
+    primary_stay_id UUID UNIQUE REFERENCES stays(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (property_id, stay_id) REFERENCES stays(property_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (property_id, guest_id) REFERENCES guests(property_id, id),
+    UNIQUE (stay_id, guest_id),
+    CHECK (
+      (is_primary_guest = TRUE AND primary_stay_id = stay_id) OR
+      (is_primary_guest = FALSE AND primary_stay_id IS NULL)
+    )
+);
+```
 
-    PRIMARY KEY (stay_id, guest_id)
+`active_room_id` is set to `room_id` while a Stay is ACTIVE and cleared on checkout. Its uniqueness prevents concurrent active stays from occupying the same room. Reservation and guest links are nullable only where explicitly allowed: a reservation is optional for walk-ins, while the stay's primary guest and room are required.
+
+## TABLE: stay_status_history
+
+Every Stay status transition is recorded with its Property, acting user, reason, and timestamp. The `(property_id, stay_id)` foreign key ensures the audit row cannot reference a Stay owned by another Property.
+
+```sql
+CREATE TABLE stay_status_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    property_id UUID NOT NULL REFERENCES properties(id),
+    stay_id UUID NOT NULL REFERENCES stays(id) ON DELETE CASCADE,
+    previous_status VARCHAR(30),
+    new_status VARCHAR(30) NOT NULL,
+    reason TEXT,
+    changed_by UUID NOT NULL REFERENCES users(id),
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (property_id, stay_id) REFERENCES stays(property_id, id) ON DELETE CASCADE
 );
 ```
 
