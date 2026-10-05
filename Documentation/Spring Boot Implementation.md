@@ -855,6 +855,8 @@ PUT    /api/v1/employees/{id}
 DELETE /api/v1/employees/{id}
 ```
 
+Employee records are scoped to the branch's organization. Optional department assignments must belong to the same branch; optional user accounts must be active and scoped within that organization or branch. Delete archives the employee as INACTIVE. Flyway V013 adds the employee table and branch/department scope constraints; V014 links operational assignments to employees.
+
 ---
 
 # 17. Guest Module

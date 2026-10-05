@@ -26,8 +26,8 @@ public class HousekeepingTask {
     private Room room;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assigned_user_id")
-    private HmsUser assignedUser;
+    @JoinColumn(name = "assigned_employee_id")
+    private Employee assignedEmployee;
 
     @Enumerated(EnumType.STRING) @Column(name = "task_type", nullable = false, length = 50)
     private HousekeepingTaskType taskType = HousekeepingTaskType.ROOM_CLEANING;

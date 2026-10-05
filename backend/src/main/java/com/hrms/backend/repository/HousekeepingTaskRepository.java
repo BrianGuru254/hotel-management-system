@@ -16,4 +16,5 @@ public interface HousekeepingTaskRepository extends JpaRepository<HousekeepingTa
     Page<HousekeepingTask> search(@Param("propertyIds") Collection<UUID> propertyIds,
         @Param("propertyId") UUID propertyId, @Param("roomId") UUID roomId,
         @Param("status") HousekeepingTaskStatus status, Pageable pageable);
+    boolean existsByAssignedEmployeeIdAndStatusIn(UUID employeeId, Collection<HousekeepingTaskStatus> statuses);
 }

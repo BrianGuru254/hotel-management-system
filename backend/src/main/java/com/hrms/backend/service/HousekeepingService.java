@@ -17,14 +17,14 @@ public class HousekeepingService {
     private static final Set<String> SORTS = Set.of("createdAt", "priority", "status", "taskType");
     private final HousekeepingTaskRepository tasks;
     private final RoomRepository rooms;
-    private final HmsUserRepository users;
+    private final EmployeeRepository employees;
     private final PropertyRepository properties;
     private final PropertyVisibilityService visibility;
     private final ScopeAuthorizationService authorization;
 
-    public HousekeepingService(HousekeepingTaskRepository tasks, RoomRepository rooms, HmsUserRepository users,
+    public HousekeepingService(HousekeepingTaskRepository tasks, RoomRepository rooms, EmployeeRepository employees,
             PropertyRepository properties, PropertyVisibilityService visibility, ScopeAuthorizationService authorization) {
-        this.tasks = tasks; this.rooms = rooms; this.users = users; this.properties = properties;
+        this.tasks = tasks; this.rooms = rooms; this.employees = employees; this.properties = properties;
         this.visibility = visibility; this.authorization = authorization;
     }
 
@@ -64,13 +64,15 @@ public class HousekeepingService {
         HousekeepingTask task = requireTask(id); authorize("HOUSEKEEPING_UPDATE", task.getProperty());
         if (task.getStatus() == HousekeepingTaskStatus.COMPLETED || task.getStatus() == HousekeepingTaskStatus.CANCELLED)
             throw new InvalidRelationshipException("A finished housekeeping task cannot be changed");
-        if (request.assignedUserId() != null) {
+        if (request.assignedEmployeeId() != null) {
             authorization.requireCapability("HOUSEKEEPING_ASSIGN", task.getProperty().getOrganization().getId(),
                     task.getProperty().getBranch().getId(), task.getProperty().getId(), null);
-            HmsUser assignee = users.findById(request.assignedUserId()).orElseThrow(() -> new ResourceNotFoundException("User", request.assignedUserId()));
-            if (!Boolean.TRUE.equals(assignee.getActive()) || !hasPropertyScope(assignee, task.getProperty()))
-                throw new InvalidRelationshipException("Assignee must be active and scoped to the task property");
-            task.setAssignedUser(assignee); task.setAssignedAt(OffsetDateTime.now());
+            Employee assignee = employees.findById(request.assignedEmployeeId()).filter(e -> e.getDeletedAt() == null)
+                    .orElseThrow(() -> new ResourceNotFoundException("Employee", request.assignedEmployeeId()));
+            if (assignee.getEmploymentStatus() != EmploymentStatus.ACTIVE || !assignee.getBranch().getId().equals(task.getProperty().getBranch().getId())
+                    || (assignee.getDepartment() != null && !assignee.getDepartment().getProperty().getId().equals(task.getProperty().getId())))
+                throw new InvalidRelationshipException("Assignee must be active and assigned to this property or branch");
+            task.setAssignedEmployee(assignee); task.setAssignedAt(OffsetDateTime.now());
             if (task.getStatus() == HousekeepingTaskStatus.PENDING) task.setStatus(HousekeepingTaskStatus.ASSIGNED);
         }
         if (request.priority() != null) task.setPriority(request.priority());
@@ -102,10 +104,10 @@ public class HousekeepingService {
             default -> false;
         };
         if (!valid) throw new InvalidRelationshipException("Invalid housekeeping status transition: " + current + " to " + target);
-        if (target == HousekeepingTaskStatus.ASSIGNED && task.getAssignedUser() == null)
-            throw new InvalidRelationshipException("Assign a user before setting task status to ASSIGNED");
+        if (target == HousekeepingTaskStatus.ASSIGNED && task.getAssignedEmployee() == null)
+            throw new InvalidRelationshipException("Assign an employee before setting task status to ASSIGNED");
         if (target == HousekeepingTaskStatus.IN_PROGRESS) {
-            if (!Objects.equals(task.getAssignedUser().getId(), authorization.currentUserId()))
+            if (task.getAssignedEmployee().getUser() == null || !Objects.equals(task.getAssignedEmployee().getUser().getId(), authorization.currentUserId()))
                 authorization.requireCapability("HOUSEKEEPING_ASSIGN", task.getProperty().getOrganization().getId(), task.getProperty().getBranch().getId(), task.getProperty().getId(), null);
             Room room = rooms.findByIdForUpdate(task.getRoom().getId()).orElseThrow(() -> new ResourceNotFoundException("Room", task.getRoom().getId()));
             if (room.getCurrentStatus() == RoomStatus.DIRTY) {
@@ -117,21 +119,12 @@ public class HousekeepingService {
         task.setStatus(target);
     }
 
-    private boolean hasPropertyScope(HmsUser user, Property property) {
-        return user.getRoleScopes().stream().anyMatch(g -> switch (g.getScopeType()) {
-            case SYSTEM -> true;
-            case ORGANIZATION -> g.getOrganization() != null && g.getOrganization().getId().equals(property.getOrganization().getId());
-            case BRANCH -> g.getBranch() != null && g.getBranch().getId().equals(property.getBranch().getId());
-            case PROPERTY, DEPARTMENT -> g.getProperty() != null && g.getProperty().getId().equals(property.getId());
-            case SELF -> false;
-        });
-    }
     private void authorize(String capability, Property p) { authorization.requireCapability(capability, p.getOrganization().getId(), p.getBranch().getId(), p.getId(), null); }
     private HousekeepingTask requireTask(UUID id) { return tasks.findById(id).orElseThrow(() -> new ResourceNotFoundException("Housekeeping task", id)); }
     private String normalize(String s) { return s == null || s.isBlank() ? null : s.trim(); }
     private HousekeepingTaskResponse response(HousekeepingTask t) {
         return new HousekeepingTaskResponse(t.getId(), t.getProperty().getId(), t.getRoom().getId(), t.getRoom().getRoomNumber(),
-                t.getAssignedUser() == null ? null : t.getAssignedUser().getId(), t.getTaskType(), t.getStatus(), t.getPriority(),
+                t.getAssignedEmployee() == null ? null : t.getAssignedEmployee().getId(), t.getTaskType(), t.getStatus(), t.getPriority(),
                 t.getNotes(), t.getAssignedAt(), t.getStartedAt(), t.getCompletedAt(), t.getCreatedAt());
     }
 }

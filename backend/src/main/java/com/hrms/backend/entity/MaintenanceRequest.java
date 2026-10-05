@@ -17,7 +17,7 @@ public class MaintenanceRequest {
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "property_id", nullable = false) private Property property;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "room_id") private Room room;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "reported_by", nullable = false) private HmsUser reportedBy;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "assigned_user_id") private HmsUser assignedUser;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "assigned_employee_id") private Employee assignedEmployee;
     @Column(nullable = false, length = 200) private String title;
     @Column(columnDefinition = "text") private String description;
     @Column(columnDefinition = "text") private String resolution;

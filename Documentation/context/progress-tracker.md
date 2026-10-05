@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Hotel Operations is in progress. Maintenance is the current feature on branch `codex/maintenance`.
+Hotel Operations is in progress. Employee management and operational employee assignment are the current feature on branch `codex/employees`.
 
 ## Current Goal
 
-Continue the backend module sequence with independently reviewable features on separate Git branches. Maintenance requests, room blocking, and status audit are implemented in the current feature branch.
+Continue the backend module sequence with independently reviewable features on separate Git branches. Employee records are property-aware through department assignments and are linked to scoped user accounts when supplied.
 
 ## Completed (Observed)
 
@@ -56,7 +56,7 @@ Continue the backend module sequence with independently reviewable features on s
 ## Next Up
 
 1. Re-establish database and signing-secret environment values, then apply/verify V006–V010 against Supabase and confirm Hibernate schema validation and application startup.
-2. Add the Employee module so operational assignments can eventually target employees rather than user accounts; then implement Guest History.
+2. Implement Guest History, then proceed through restaurant/POS and the other documented modules.
 3. Continue the remaining documented backend modules in dependency order: Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services. Keep the frontend untouched.
 
 ## Open Decisions
@@ -75,8 +75,9 @@ Continue the backend module sequence with independently reviewable features on s
 - Room inventory is implemented on `codex/rooms`, based on the completed Room Type/Amenity catalog branch.
 - Reservations are implemented in the current `Hotel-Core` line; Stay/front-desk work is isolated on `codex/stays`.
 - Each additional backend feature continues on a dedicated `codex/` branch. The frontend remains untouched.
-- Housekeeping is implemented on `codex/housekeeping`; assignments use active system users until an Employee module exists.
-- Maintenance is implemented on `codex/maintenance`; assigned technicians must have the live maintenance-update capability within the request property.
+- Housekeeping is implemented on `codex/housekeeping`; its original user assignments are linked to employees by V014 where possible.
+- Maintenance is implemented on `codex/maintenance`; V014 links assigned employees, whose accounts must hold the live maintenance-update capability within the request property.
+- Employee management is implemented on `codex/employees`; records are branch-owned, optionally department- and user-linked, organization-unique, and soft-archived.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 
@@ -85,5 +86,6 @@ Continue the backend module sequence with independently reviewable features on s
 - Context files are stored under `Documentation/context/` and describe the HMS repository rather than the portfolio starter templates.
 - The original foundation milestone passed 19 tests and verified startup against Supabase through V005. The latest Maven suite passes 27 tests using H2 in PostgreSQL mode with Hibernate schema validation enabled.
 - In the current verification session, database connection and application secret environment variables were not available. No Supabase migration or startup was attempted; remote V006–V010 status remains unverified.
-- Housekeeping code and migration V011 are implemented locally. Tests and live migration were not run; Maven compile could not start because the wrapper failed under the available PowerShell and Maven is not installed on PATH.
-- Maintenance code and migration V012 are implemented locally. Tests and live migration have not been run.
+- Housekeeping code and migration V011 are implemented on `codex/housekeeping`. Tests and live migration were not run. The Maven wrapper's PowerShell cache-path null handling was fixed on the Employee branch; compile now succeeds.
+- Maintenance code and migration V012 are implemented on `codex/maintenance`. Tests and live migration have not been run.
+- Employee management is implemented on `codex/employees` with migrations V013 and V014; tests and live migration have not been run. Maven compile passes.

@@ -104,7 +104,8 @@ CREATE TABLE departments (
  created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
  CONSTRAINT fk_departments_property_scope FOREIGN KEY (organization_id, branch_id, property_id) REFERENCES properties(organization_id, branch_id, id),
  CONSTRAINT uq_departments_property_code UNIQUE (property_id, code),
- CONSTRAINT uq_departments_scope UNIQUE (organization_id, branch_id, property_id, id)
+ CONSTRAINT uq_departments_scope UNIQUE (organization_id, branch_id, property_id, id),
+ CONSTRAINT uq_departments_org_branch_id UNIQUE (organization_id, branch_id, id)
 );
 
 CREATE TABLE roles (
@@ -442,13 +443,33 @@ CREATE TABLE maintenance_status_history (
  CONSTRAINT fk_maintenance_history_actor FOREIGN KEY (changed_by) REFERENCES users(id)
 );
 CREATE INDEX idx_maintenance_history_request ON maintenance_status_history(property_id, maintenance_request_id, changed_at);
+CREATE TABLE employees (
+ id UUID PRIMARY KEY, organization_id UUID NOT NULL, branch_id UUID NOT NULL, department_id UUID, user_id UUID,
+ employee_number VARCHAR(50) NOT NULL, first_name VARCHAR(100) NOT NULL, last_name VARCHAR(100) NOT NULL,
+ email VARCHAR(255), phone VARCHAR(50), job_title VARCHAR(150), employment_status VARCHAR(30) NOT NULL,
+ hire_date DATE, created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL, deleted_at TIMESTAMP WITH TIME ZONE,
+ CONSTRAINT fk_employees_branch_scope FOREIGN KEY (organization_id, branch_id) REFERENCES branches(organization_id, id),
+ CONSTRAINT fk_employees_department_scope FOREIGN KEY (organization_id, branch_id, department_id) REFERENCES departments(organization_id, branch_id, id),
+ CONSTRAINT fk_employees_user FOREIGN KEY (user_id) REFERENCES users(id),
+ CONSTRAINT uq_employees_org_scope UNIQUE (organization_id, id),
+ CONSTRAINT uq_employees_org_branch_id UNIQUE (organization_id, branch_id, id),
+ CONSTRAINT uq_employees_org_number UNIQUE (organization_id, employee_number),
+ CONSTRAINT uq_employees_user UNIQUE (user_id)
+);
+CREATE INDEX idx_employees_org_status ON employees(organization_id, employment_status);
+CREATE INDEX idx_employees_branch ON employees(branch_id);
+CREATE INDEX idx_employees_department ON employees(department_id);
+ALTER TABLE housekeeping_tasks ADD assigned_employee_id UUID REFERENCES employees(id);
+ALTER TABLE maintenance_requests ADD assigned_employee_id UUID REFERENCES employees(id);
 INSERT INTO capabilities(capability_key, description) VALUES
  ('HOUSEKEEPING_READ','Read housekeeping work'),('HOUSEKEEPING_UPDATE','Update housekeeping work'),('HOUSEKEEPING_ASSIGN','Assign housekeeping work'),
- ('MAINTENANCE_READ','Read maintenance work'),('MAINTENANCE_UPDATE','Update maintenance work'),('MAINTENANCE_ASSIGN','Assign maintenance work');
+ ('MAINTENANCE_READ','Read maintenance work'),('MAINTENANCE_UPDATE','Update maintenance work'),('MAINTENANCE_ASSIGN','Assign maintenance work'),
+ ('EMPLOYEE_READ','Read employee records'),('EMPLOYEE_CREATE','Create employee records'),('EMPLOYEE_UPDATE','Update employee records');
 INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('SUPER_ADMIN','HOUSEKEEPING_READ'),('SUPER_ADMIN','HOUSEKEEPING_UPDATE'),('SUPER_ADMIN','HOUSEKEEPING_ASSIGN'),
  ('SUPER_ADMIN','MAINTENANCE_READ'),('SUPER_ADMIN','MAINTENANCE_UPDATE'),('SUPER_ADMIN','MAINTENANCE_ASSIGN'),
  ('HOUSEKEEPING_MANAGER','HOUSEKEEPING_READ'),('HOUSEKEEPING_MANAGER','HOUSEKEEPING_UPDATE'),('HOUSEKEEPING_MANAGER','HOUSEKEEPING_ASSIGN'),
  ('HOUSEKEEPING_STAFF','HOUSEKEEPING_READ'),('HOUSEKEEPING_STAFF','HOUSEKEEPING_UPDATE'),
  ('MAINTENANCE_MANAGER','MAINTENANCE_READ'),('MAINTENANCE_MANAGER','MAINTENANCE_UPDATE'),('MAINTENANCE_MANAGER','MAINTENANCE_ASSIGN'),
- ('MAINTENANCE_STAFF','MAINTENANCE_READ'),('MAINTENANCE_STAFF','MAINTENANCE_UPDATE');
+ ('MAINTENANCE_STAFF','MAINTENANCE_READ'),('MAINTENANCE_STAFF','MAINTENANCE_UPDATE'),
+ ('HR_MANAGER','EMPLOYEE_READ'),('HR_MANAGER','EMPLOYEE_CREATE'),('HR_MANAGER','EMPLOYEE_UPDATE');

@@ -10,7 +10,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "departments", uniqueConstraints = {
         @UniqueConstraint(name = "uq_departments_property_code", columnNames = {"property_id", "code"}),
-        @UniqueConstraint(name = "uq_departments_scope", columnNames = {"organization_id", "branch_id", "property_id", "id"})
+        @UniqueConstraint(name = "uq_departments_scope", columnNames = {"organization_id", "branch_id", "property_id", "id"}),
+        @UniqueConstraint(name = "uq_departments_org_branch_id", columnNames = {"organization_id", "branch_id", "id"})
 })
 @Getter
 @Setter

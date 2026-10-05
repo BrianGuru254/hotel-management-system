@@ -21,15 +21,16 @@ public class MaintenanceService {
     private final MaintenanceStatusHistoryRepository histories;
     private final RoomRepository rooms;
     private final PropertyRepository properties;
+    private final EmployeeRepository employees;
     private final HmsUserRepository users;
     private final PropertyVisibilityService visibility;
     private final ScopeAuthorizationService authorization;
 
     public MaintenanceService(MaintenanceRequestRepository requests, MaintenanceStatusHistoryRepository histories,
-            RoomRepository rooms, PropertyRepository properties, HmsUserRepository users,
+            RoomRepository rooms, PropertyRepository properties, EmployeeRepository employees, HmsUserRepository users,
             PropertyVisibilityService visibility, ScopeAuthorizationService authorization) {
         this.requests = requests; this.histories = histories; this.rooms = rooms; this.properties = properties;
-        this.users = users; this.visibility = visibility; this.authorization = authorization;
+        this.employees = employees; this.users = users; this.visibility = visibility; this.authorization = authorization;
     }
 
     @Transactional(readOnly = true)
@@ -86,17 +87,21 @@ public class MaintenanceService {
         MaintenanceRequest request = requireRequest(id); authorize("MAINTENANCE_ASSIGN", request.getProperty());
         if (request.getStatus() != MaintenanceStatus.OPEN && request.getStatus() != MaintenanceStatus.ASSIGNED)
             throw new InvalidRelationshipException("Only open or assigned requests can be reassigned");
-        HmsUser assignee = users.findById(body.userId()).orElseThrow(() -> new ResourceNotFoundException("User", body.userId()));
-        if (!Boolean.TRUE.equals(assignee.getActive()) || !hasMaintenanceCapability(assignee, request.getProperty()))
-            throw new InvalidRelationshipException("Technician must be active and have maintenance access to the request property");
-        request.setAssignedUser(assignee); request.setAssignedAt(OffsetDateTime.now());
+        Employee assignee = employees.findById(body.employeeId()).filter(e -> e.getDeletedAt() == null)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee", body.employeeId()));
+        if (assignee.getEmploymentStatus() != EmploymentStatus.ACTIVE
+                || !assignee.getBranch().getId().equals(request.getProperty().getBranch().getId())
+                || (assignee.getDepartment() != null && !assignee.getDepartment().getProperty().getId().equals(request.getProperty().getId()))
+                || assignee.getUser() == null || !hasMaintenanceCapability(assignee.getUser(), request.getProperty()))
+            throw new InvalidRelationshipException("Technician must be active, linked to a maintenance-enabled account, and assigned to this property or branch");
+        request.setAssignedEmployee(assignee); request.setAssignedAt(OffsetDateTime.now());
         if (request.getStatus() == MaintenanceStatus.OPEN) transition(request, MaintenanceStatus.ASSIGNED, "Technician assigned");
         return response(requests.save(request));
     }
 
     public MaintenanceResponse start(UUID id) {
         MaintenanceRequest request = requireRequest(id); authorize("MAINTENANCE_UPDATE", request.getProperty());
-        if (request.getAssignedUser() == null) throw new InvalidRelationshipException("Assign a technician before starting work");
+        if (request.getAssignedEmployee() == null) throw new InvalidRelationshipException("Assign a technician before starting work");
         requireAssigneeOrManager(request);
         if (request.getStatus() != MaintenanceStatus.ASSIGNED) throw new InvalidRelationshipException("Only assigned requests can be started");
         request.setStartedAt(OffsetDateTime.now()); transition(request, MaintenanceStatus.IN_PROGRESS, "Work started");
@@ -153,11 +158,11 @@ public class MaintenanceService {
             authorization.requireCapability("ROOM_MAINTENANCE_STATUS_UPDATE", p.getOrganization().getId(), p.getBranch().getId(), p.getId(), null);
     }
     private void requireAssigneeOrManager(MaintenanceRequest r) {
-        if (!r.getAssignedUser().getId().equals(authorization.currentUserId()))
+        if (r.getAssignedEmployee().getUser() == null || !r.getAssignedEmployee().getUser().getId().equals(authorization.currentUserId()))
             authorization.requireCapability("MAINTENANCE_ASSIGN", r.getProperty().getOrganization().getId(), r.getProperty().getBranch().getId(), r.getProperty().getId(), null);
     }
     private boolean hasMaintenanceCapability(HmsUser user, Property property) {
-        return user.getRoleScopes().stream()
+        return Boolean.TRUE.equals(user.getActive()) && user.getRoleScopes().stream()
                 .filter(g -> g.getRole().getCapabilities().stream().anyMatch(c -> "MAINTENANCE_UPDATE".equals(c.getCapabilityKey())))
                 .anyMatch(g -> switch (g.getScopeType()) {
                     case SYSTEM -> true;
@@ -174,7 +179,7 @@ public class MaintenanceService {
     private MaintenanceResponse response(MaintenanceRequest r) {
         return new MaintenanceResponse(r.getId(), r.getProperty().getId(), r.getRoom() == null ? null : r.getRoom().getId(),
                 r.getRoom() == null ? null : r.getRoom().getRoomNumber(), r.getReportedBy().getId(),
-                r.getAssignedUser() == null ? null : r.getAssignedUser().getId(), r.getTitle(), r.getDescription(), r.getResolution(),
+                r.getAssignedEmployee() == null ? null : r.getAssignedEmployee().getId(), r.getTitle(), r.getDescription(), r.getResolution(),
                 r.getPriority(), r.getStatus(), r.getReportedAt(), r.getAssignedAt(), r.getStartedAt(), r.getResolvedAt(), r.getClosedAt());
     }
 }

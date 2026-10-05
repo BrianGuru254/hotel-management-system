@@ -702,6 +702,8 @@ CREATE TABLE departments (
 
 # 19. Employees
 
+Runtime note: V013 adds same-organization/branch constraints and case-insensitive employee uniqueness; V014 adds employee assignment references to the operational task tables. The original table sketch below omits those later constraints.
+
 ```sql
 CREATE TABLE employees (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

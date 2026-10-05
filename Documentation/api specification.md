@@ -697,15 +697,20 @@ Request:
 ```json
 {
   "branchId": "UUID",
+  "departmentId": "UUID",
+  "userId": "UUID",
   "employeeNumber": "EMP001",
   "firstName": "John",
   "lastName": "Doe",
   "phone": "+254700000000",
   "email": "john@example.com",
-  "department": "RECEPTION",
-  "position": "Receptionist"
+  "jobTitle": "Receptionist",
+  "employmentStatus": "ACTIVE",
+  "hireDate": "2026-10-05"
 }
 ```
+
+`departmentId` and `userId` are optional. List filters include `organizationId`, `branchId`, `departmentId`, `status`, and `search`, with pagination and sorting. Delete archives the employee by marking the record INACTIVE; it does not remove the record.
 
 ## Update Employee
 
@@ -1268,7 +1273,7 @@ Request fields: `propertyId`, `roomId`, optional `taskType`, `priority`, and `no
 PUT /api/v1/housekeeping/tasks/{id}
 ```
 
-The update accepts optional `assignedUserId`, `status`, `priority`, and `notes`. Assignment requires the scoped `HOUSEKEEPING_ASSIGN` capability and an active user with access to the task property.
+The update accepts optional `assignedEmployeeId`, `status`, `priority`, and `notes`. Assignment requires the scoped `HOUSEKEEPING_ASSIGN` capability and an active employee assigned to the same property or branch.
 
 ## Complete Task
 
@@ -1304,7 +1309,7 @@ Request fields: required `propertyId` and `title`, optional `roomId`, `descripti
 PATCH /api/v1/maintenance/{id}/assign
 ```
 
-Request: `{ "userId": "UUID" }`. The technician must be active and hold scoped maintenance-update capability for the request property.
+Request: `{ "employeeId": "UUID" }`. The technician must be an active employee with a linked account holding scoped maintenance-update capability for the request property.
 
 ## Start Maintenance
 

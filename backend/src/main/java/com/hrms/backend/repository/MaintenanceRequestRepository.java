@@ -17,4 +17,5 @@ public interface MaintenanceRequestRepository extends JpaRepository<MaintenanceR
         @Param("roomId") UUID roomId, @Param("status") MaintenanceStatus status,
         @Param("priority") com.hrms.backend.entity.MaintenancePriority priority, Pageable pageable);
     boolean existsByRoomIdAndStatusIn(UUID roomId, Collection<MaintenanceStatus> statuses);
+    boolean existsByAssignedEmployeeIdAndStatusIn(UUID employeeId, Collection<MaintenanceStatus> statuses);
 }
