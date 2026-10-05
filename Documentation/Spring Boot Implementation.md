@@ -1062,6 +1062,8 @@ CLOSED
 CANCELLED
 ```
 
+The implemented REST module is property-scoped. Room-linked requests lock a same-property room in `MAINTENANCE`; assigned technicians must be active users with the request property's live maintenance-update capability. Status history records the actor and reason. Resolving or cancelling a request restores its prior available/dirty state. Flyway V012 defines the request and history tables.
+
 The service should support:
 
 - issue reporting

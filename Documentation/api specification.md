@@ -1288,17 +1288,23 @@ Starting a task is requested by updating its status to `IN_PROGRESS`; completion
 GET /api/v1/maintenance
 ```
 
+Supports `propertyId`, `roomId`, `status`, `priority`, `page`, `size`, `sort`, and `direction` filters. Results are scoped to the caller's live maintenance capability and property grants.
+
 ## Create Request
 
 ```http
 POST /api/v1/maintenance
 ```
 
+Request fields: required `propertyId` and `title`, optional `roomId`, `description`, and `priority`. A room-linked request blocks that room from new bookings until resolution or cancellation. The room and request must belong to the same property.
+
 ## Assign Technician
 
 ```http
 PATCH /api/v1/maintenance/{id}/assign
 ```
+
+Request: `{ "userId": "UUID" }`. The technician must be active and hold scoped maintenance-update capability for the request property.
 
 ## Start Maintenance
 
@@ -1319,6 +1325,8 @@ Request:
   "resolution": "Air conditioner repaired"
 }
 ```
+
+`GET /api/v1/maintenance/{id}` returns a request and `GET /api/v1/maintenance/{id}/history` returns its status audit trail. Resolved requests can be closed at `PATCH /api/v1/maintenance/{id}/close`; open or assigned requests can be cancelled at `PATCH /api/v1/maintenance/{id}/cancel`. Resolving or cancelling restores a previously available room to AVAILABLE; other cleanable room states return to DIRTY.
 
 ---
 

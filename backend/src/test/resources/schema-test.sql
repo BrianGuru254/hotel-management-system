@@ -419,3 +419,36 @@ CREATE TABLE housekeeping_tasks (
 );
 CREATE INDEX idx_housekeeping_property_status ON housekeeping_tasks(property_id, status, created_at);
 CREATE INDEX idx_housekeeping_room_status ON housekeeping_tasks(room_id, status);
+
+CREATE TABLE maintenance_requests (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, room_id UUID, reported_by UUID NOT NULL, assigned_user_id UUID,
+ title VARCHAR(200) NOT NULL, description VARCHAR(100000), resolution VARCHAR(100000), priority VARCHAR(20) NOT NULL,
+ status VARCHAR(30) NOT NULL, room_status_before VARCHAR(30), reported_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ assigned_at TIMESTAMP WITH TIME ZONE, started_at TIMESTAMP WITH TIME ZONE, resolved_at TIMESTAMP WITH TIME ZONE,
+ closed_at TIMESTAMP WITH TIME ZONE, created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_maintenance_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_maintenance_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+ CONSTRAINT fk_maintenance_reporter FOREIGN KEY (reported_by) REFERENCES users(id),
+ CONSTRAINT fk_maintenance_assignee FOREIGN KEY (assigned_user_id) REFERENCES users(id),
+ CONSTRAINT uq_maintenance_property_scope UNIQUE (property_id, id)
+);
+CREATE INDEX idx_maintenance_property_status ON maintenance_requests(property_id, status, reported_at);
+CREATE INDEX idx_maintenance_room_status ON maintenance_requests(room_id, status);
+CREATE TABLE maintenance_status_history (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, maintenance_request_id UUID NOT NULL,
+ previous_status VARCHAR(30), new_status VARCHAR(30) NOT NULL, reason VARCHAR(1000), changed_by UUID NOT NULL,
+ changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_maintenance_history_request_scope FOREIGN KEY (property_id, maintenance_request_id) REFERENCES maintenance_requests(property_id, id),
+ CONSTRAINT fk_maintenance_history_actor FOREIGN KEY (changed_by) REFERENCES users(id)
+);
+CREATE INDEX idx_maintenance_history_request ON maintenance_status_history(property_id, maintenance_request_id, changed_at);
+INSERT INTO capabilities(capability_key, description) VALUES
+ ('HOUSEKEEPING_READ','Read housekeeping work'),('HOUSEKEEPING_UPDATE','Update housekeeping work'),('HOUSEKEEPING_ASSIGN','Assign housekeeping work'),
+ ('MAINTENANCE_READ','Read maintenance work'),('MAINTENANCE_UPDATE','Update maintenance work'),('MAINTENANCE_ASSIGN','Assign maintenance work');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('SUPER_ADMIN','HOUSEKEEPING_READ'),('SUPER_ADMIN','HOUSEKEEPING_UPDATE'),('SUPER_ADMIN','HOUSEKEEPING_ASSIGN'),
+ ('SUPER_ADMIN','MAINTENANCE_READ'),('SUPER_ADMIN','MAINTENANCE_UPDATE'),('SUPER_ADMIN','MAINTENANCE_ASSIGN'),
+ ('HOUSEKEEPING_MANAGER','HOUSEKEEPING_READ'),('HOUSEKEEPING_MANAGER','HOUSEKEEPING_UPDATE'),('HOUSEKEEPING_MANAGER','HOUSEKEEPING_ASSIGN'),
+ ('HOUSEKEEPING_STAFF','HOUSEKEEPING_READ'),('HOUSEKEEPING_STAFF','HOUSEKEEPING_UPDATE'),
+ ('MAINTENANCE_MANAGER','MAINTENANCE_READ'),('MAINTENANCE_MANAGER','MAINTENANCE_UPDATE'),('MAINTENANCE_MANAGER','MAINTENANCE_ASSIGN'),
+ ('MAINTENANCE_STAFF','MAINTENANCE_READ'),('MAINTENANCE_STAFF','MAINTENANCE_UPDATE');

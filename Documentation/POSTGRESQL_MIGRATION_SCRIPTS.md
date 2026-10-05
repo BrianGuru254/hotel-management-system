@@ -1139,6 +1139,8 @@ CREATE TABLE housekeeping_tasks (
 
 # 29. Maintenance
 
+The runtime schema in Flyway V012 uses `property_id` with a composite same-property room reference. Since an Employee table is not yet implemented, reporter and assigned technician IDs reference active users; the runtime migration adds a status-history table and one active room-blocking request per room. The SQL sketch below describes the earlier branch/employee model and is retained as historical design reference.
+
 ```sql
 CREATE TABLE maintenance_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
