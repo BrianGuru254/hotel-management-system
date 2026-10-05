@@ -798,6 +798,8 @@ Payments
 Loyalty
 ```
 
+The current backend returns the first 100 reservations and stays for the guest at their owning property, ordered newest first. Stay history includes both the primary guest and additional guests assigned to the stay. `availableSections` lists `reservations` and `stays`; `unavailableSections` explicitly reports `orders`, `invoices`, `payments`, and `loyalty` until those modules are implemented. The endpoint requires `GUEST_READ` capability and access to the guest's property.
+
 ---
 
 # 23. ROOM TYPE APIs

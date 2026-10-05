@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Hotel Operations is in progress. Employee management and operational employee assignment are the current feature on branch `codex/employees`.
+Hotel Operations is in progress. Guest History is the current feature on branch `codex/guest-history`.
 
 ## Current Goal
 
-Continue the backend module sequence with independently reviewable features on separate Git branches. Employee records are property-aware through department assignments and are linked to scoped user accounts when supplied.
+Continue the backend module sequence with independently reviewable features on separate Git branches. Guest History combines the reservations and stays currently available for each property-owned guest.
 
 ## Completed (Observed)
 
@@ -56,7 +56,7 @@ Continue the backend module sequence with independently reviewable features on s
 ## Next Up
 
 1. Re-establish database and signing-secret environment values, then apply/verify V006–V010 against Supabase and confirm Hibernate schema validation and application startup.
-2. Implement Guest History, then proceed through restaurant/POS and the other documented modules.
+2. Proceed through Restaurant/POS and the other documented modules in dependency order.
 3. Continue the remaining documented backend modules in dependency order: Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services. Keep the frontend untouched.
 
 ## Open Decisions
@@ -78,6 +78,7 @@ Continue the backend module sequence with independently reviewable features on s
 - Housekeeping is implemented on `codex/housekeeping`; its original user assignments are linked to employees by V014 where possible.
 - Maintenance is implemented on `codex/maintenance`; V014 links assigned employees, whose accounts must hold the live maintenance-update capability within the request property.
 - Employee management is implemented on `codex/employees`; records are branch-owned, optionally department- and user-linked, organization-unique, and soft-archived.
+- Guest History is implemented on `codex/guest-history` for reservations and primary/additional guest stays. Orders, invoices, payments, and loyalty are explicitly returned as unavailable pending those modules.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 
@@ -89,3 +90,4 @@ Continue the backend module sequence with independently reviewable features on s
 - Housekeeping code and migration V011 are implemented on `codex/housekeeping`. Tests and live migration were not run. The Maven wrapper's PowerShell cache-path null handling was fixed on the Employee branch; compile now succeeds.
 - Maintenance code and migration V012 are implemented on `codex/maintenance`. Tests and live migration have not been run.
 - Employee management is implemented on `codex/employees` with migrations V013 and V014; tests and live migration have not been run. Maven compile passes.
+- Guest History is implemented on `codex/guest-history`; Maven compile passes. Automated tests and live database checks have not been run.

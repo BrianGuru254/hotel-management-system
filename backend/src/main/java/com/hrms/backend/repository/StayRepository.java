@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface StayRepository extends JpaRepository<Stay, UUID> {
+    Page<Stay> findByPropertyIdAndGuestId(UUID propertyId, UUID guestId, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select stay from Stay stay where stay.id = :id")
     Optional<Stay> findByIdForUpdate(@Param("id") UUID id);

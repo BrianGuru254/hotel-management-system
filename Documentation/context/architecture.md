@@ -53,6 +53,8 @@ Maintenance requests are property-owned and may reference a same-property room. 
 
 Employees belong to one organization and branch, with an optional department constrained to that same branch and a one-to-one optional user account. HR list/detail/create/update/archive operations enforce live employee capabilities and scope; employee numbers and email addresses are unique case-insensitively within an organization. Housekeeping and Maintenance assignments reference employees after V014.
 
+Guest History currently composes up to 100 same-property reservations and stays in reverse chronological order, including stays where the guest is an additional registered occupant. Orders, invoices, payments, and loyalty are reported as unavailable until those modules exist; the endpoint does not imply that the guest has no records in those areas.
+
 Reservations and Stays are also Property-scoped. Reservations reference a guest, room type, and optional room from that same property, and the database reinforces this with composite foreign keys. Check-in requires a confirmed reservation or an explicitly scoped walk-in; each active Stay locks one physical room. Guest assignments on a Stay are property-bound. Check-out moves the room to DIRTY and updates the reservation lifecycle. Checkout preview is an estimate from the saved nightly rate and deposit; payments, folios, and invoicing remain later Finance work. Stay checkout is stored as a local date to align with reservation dates, while actual check-in/out timestamps remain timezone-aware.
 
 ## Invariants
