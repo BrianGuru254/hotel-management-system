@@ -407,3 +407,15 @@ INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('FRONT_DESK','STAY_READ'),('FRONT_DESK','STAY_HISTORY_READ'),('FRONT_DESK','STAY_GUEST_MANAGE'),('FRONT_DESK','CHECK_IN'),('FRONT_DESK','WALK_IN_CHECK_IN'),('FRONT_DESK','CHECK_OUT'),('FRONT_DESK','CHECKOUT_PREVIEW_READ'),
  ('RESERVATIONS_AGENT','STAY_READ'),('RESERVATIONS_AGENT','STAY_HISTORY_READ'),('RESERVATIONS_AGENT','STAY_GUEST_MANAGE'),('RESERVATIONS_AGENT','CHECK_IN'),('RESERVATIONS_AGENT','WALK_IN_CHECK_IN'),('RESERVATIONS_AGENT','CHECK_OUT'),('RESERVATIONS_AGENT','CHECKOUT_PREVIEW_READ'),
  ('REPORTING_USER','STAY_READ'),('REPORTING_USER','STAY_HISTORY_READ'),('REPORTING_USER','CHECKOUT_PREVIEW_READ');
+
+CREATE TABLE housekeeping_tasks (
+ id UUID PRIMARY KEY, property_id UUID NOT NULL, room_id UUID NOT NULL, assigned_user_id UUID,
+ task_type VARCHAR(50) NOT NULL, status VARCHAR(30) NOT NULL, priority VARCHAR(20) NOT NULL, notes VARCHAR(100000),
+ assigned_at TIMESTAMP WITH TIME ZONE, started_at TIMESTAMP WITH TIME ZONE, completed_at TIMESTAMP WITH TIME ZONE,
+ created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_housekeeping_property FOREIGN KEY (property_id) REFERENCES properties(id),
+ CONSTRAINT fk_housekeeping_room_scope FOREIGN KEY (property_id, room_id) REFERENCES rooms(property_id, id),
+ CONSTRAINT fk_housekeeping_assignee FOREIGN KEY (assigned_user_id) REFERENCES users(id)
+);
+CREATE INDEX idx_housekeeping_property_status ON housekeeping_tasks(property_id, status, created_at);
+CREATE INDEX idx_housekeeping_room_status ON housekeeping_tasks(room_id, status);

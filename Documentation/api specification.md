@@ -1245,10 +1245,13 @@ GET /api/v1/housekeeping/tasks
 Filters:
 
 ```text
+propertyId
 roomId
-assignedTo
 status
-priority
+page
+size
+sort
+direction
 ```
 
 ## Create Task
@@ -1257,31 +1260,23 @@ priority
 POST /api/v1/housekeeping/tasks
 ```
 
-## Assign Task
+Request fields: `propertyId`, `roomId`, optional `taskType`, `priority`, and `notes`.
+
+## Update Task
 
 ```http
-PATCH /api/v1/housekeeping/tasks/{id}/assign
+PUT /api/v1/housekeeping/tasks/{id}
 ```
 
-Request:
-
-```json
-{
-  "employeeId": "UUID"
-}
-```
-
-## Start Task
-
-```http
-PATCH /api/v1/housekeeping/tasks/{id}/start
-```
+The update accepts optional `assignedUserId`, `status`, `priority`, and `notes`. Assignment requires the scoped `HOUSEKEEPING_ASSIGN` capability and an active user with access to the task property.
 
 ## Complete Task
 
 ```http
-PATCH /api/v1/housekeeping/tasks/{id}/complete
+POST /api/v1/housekeeping/tasks/{id}/complete
 ```
+
+Starting a task is requested by updating its status to `IN_PROGRESS`; completion releases a cleaned room to `AVAILABLE`.
 
 ---
 
