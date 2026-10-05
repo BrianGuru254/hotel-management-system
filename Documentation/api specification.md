@@ -1415,6 +1415,8 @@ PATCH /api/v1/tables/{id}/status
 GET /api/v1/restaurants/{restaurantId}/menu/categories
 ```
 
+Returns a paginated list of active categories, ordered by display order by default.
+
 ## Create Category
 
 ```http
@@ -1432,6 +1434,8 @@ PUT /api/v1/menu/categories/{id}
 ```http
 DELETE /api/v1/menu/categories/{id}
 ```
+
+Deactivates the category; category deletion is soft so menu references remain valid.
 
 ---
 
@@ -1495,6 +1499,14 @@ Request:
   "available": false
 }
 ```
+
+## Delete Item
+
+```http
+DELETE /api/v1/menu/items/{id}
+```
+
+Marks the item unavailable instead of removing its record. Menu reads are limited to restaurants in the caller's authorized branch scope. Category/item writes require the corresponding `MENU_CREATE` or `MENU_UPDATE` capability.
 
 ---
 

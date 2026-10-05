@@ -500,3 +500,30 @@ INSERT INTO role_capabilities(role_key, capability_key) VALUES
  ('RESTAURANT_MANAGER','RESTAURANT_TABLE_READ'),('RESTAURANT_MANAGER','RESTAURANT_TABLE_CREATE'),('RESTAURANT_MANAGER','RESTAURANT_TABLE_UPDATE'),('RESTAURANT_MANAGER','RESTAURANT_TABLE_STATUS_UPDATE'),
  ('BRANCH_MANAGER','RESTAURANT_READ'),('BRANCH_MANAGER','RESTAURANT_CREATE'),('BRANCH_MANAGER','RESTAURANT_UPDATE'),
  ('BRANCH_MANAGER','RESTAURANT_TABLE_READ'),('BRANCH_MANAGER','RESTAURANT_TABLE_CREATE'),('BRANCH_MANAGER','RESTAURANT_TABLE_UPDATE'),('BRANCH_MANAGER','RESTAURANT_TABLE_STATUS_UPDATE');
+CREATE TABLE menu_categories (
+ id UUID PRIMARY KEY, restaurant_id UUID NOT NULL, name VARCHAR(120) NOT NULL, description TEXT,
+ display_order INTEGER NOT NULL, is_active BOOLEAN NOT NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_menu_categories_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
+ CONSTRAINT uq_menu_categories_restaurant_id UNIQUE (restaurant_id, id),
+ CONSTRAINT uq_menu_categories_restaurant_name UNIQUE (restaurant_id, name)
+);
+CREATE INDEX idx_menu_categories_restaurant ON menu_categories(restaurant_id, display_order);
+CREATE TABLE menu_items (
+ id UUID PRIMARY KEY, restaurant_id UUID NOT NULL, category_id UUID NOT NULL, name VARCHAR(150) NOT NULL,
+ sku VARCHAR(50) NOT NULL, description TEXT, selling_price NUMERIC(12,2) NOT NULL, tax_rate NUMERIC(5,2) NOT NULL,
+ preparation_time_minutes INTEGER NOT NULL, available BOOLEAN NOT NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+ CONSTRAINT fk_menu_items_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
+ CONSTRAINT fk_menu_items_category_scope FOREIGN KEY (restaurant_id, category_id) REFERENCES menu_categories(restaurant_id, id),
+ CONSTRAINT uq_menu_items_restaurant_sku UNIQUE (restaurant_id, sku),
+ CONSTRAINT ck_menu_items_price CHECK (selling_price >= 0),
+ CONSTRAINT ck_menu_items_tax_rate CHECK (tax_rate BETWEEN 0 AND 100),
+ CONSTRAINT ck_menu_items_preparation_time CHECK (preparation_time_minutes >= 0)
+);
+CREATE INDEX idx_menu_items_category ON menu_items(category_id);
+INSERT INTO capabilities(capability_key, description) VALUES
+ ('MENU_READ','Read restaurant menus'),('MENU_CREATE','Create restaurant menu entries'),('MENU_UPDATE','Update restaurant menu entries');
+INSERT INTO role_capabilities(role_key, capability_key) VALUES
+ ('SUPER_ADMIN','MENU_READ'),('SUPER_ADMIN','MENU_CREATE'),('SUPER_ADMIN','MENU_UPDATE'),
+ ('RESTAURANT_MANAGER','MENU_READ'),('RESTAURANT_MANAGER','MENU_CREATE'),('RESTAURANT_MANAGER','MENU_UPDATE');

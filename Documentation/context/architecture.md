@@ -57,6 +57,8 @@ Guest History currently composes up to 100 same-property reservations and stays 
 
 Restaurants belong to branches; tables belong to one restaurant. Restaurant and table management requires live branch-scoped capabilities. Table occupancy status follows a constrained lifecycle, and a restaurant cannot be deactivated while any table is not AVAILABLE. Order-to-table assignment is deferred to the POS/Orders module.
 
+Restaurant menus are branch-scoped through their owning restaurant. Categories and items are soft-deactivated/availability-managed, and items must reference a category from the same restaurant. Menu listing is restricted to the caller's visible branches; `MENU_READ`, `MENU_CREATE`, and `MENU_UPDATE` are the live capabilities. Flyway V016 adds menu category/item storage and scope constraints.
+
 Reservations and Stays are also Property-scoped. Reservations reference a guest, room type, and optional room from that same property, and the database reinforces this with composite foreign keys. Check-in requires a confirmed reservation or an explicitly scoped walk-in; each active Stay locks one physical room. Guest assignments on a Stay are property-bound. Check-out moves the room to DIRTY and updates the reservation lifecycle. Checkout preview is an estimate from the saved nightly rate and deposit; payments, folios, and invoicing remain later Finance work. Stay checkout is stored as a local date to align with reservation dates, while actual check-in/out timestamps remain timezone-aware.
 
 ## Invariants

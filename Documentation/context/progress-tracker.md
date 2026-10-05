@@ -55,9 +55,9 @@ Continue the backend module sequence with independently reviewable features on s
 
 ## Next Up
 
-1. Re-establish database and signing-secret environment values, then apply/verify V006–V010 against Supabase and confirm Hibernate schema validation and application startup.
-2. Implement Menu and POS/Orders, then Kitchen, Inventory/Procurement, Finance, and the remaining documented modules in dependency order.
-3. Continue the remaining documented backend modules in dependency order: Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services. Keep the frontend untouched.
+1. Implement POS/Orders and table-order assignment, then Kitchen, Inventory/Procurement, Finance, and remaining documented modules in dependency order.
+2. Re-establish database and signing-secret environment values, then apply/verify V006–V016 against Supabase and confirm Hibernate schema validation and application startup.
+3. Keep the frontend untouched while completing the documented backend modules.
 
 ## Open Decisions
 
@@ -80,6 +80,7 @@ Continue the backend module sequence with independently reviewable features on s
 - Employee management is implemented on `codex/employees`; records are branch-owned, optionally department- and user-linked, organization-unique, and soft-archived.
 - Guest History is implemented on `codex/guest-history` for reservations and primary/additional guest stays. Orders, invoices, payments, and loyalty are explicitly returned as unavailable pending those modules.
 - Branch-scoped Restaurants and Restaurant Tables are implemented on `codex/restaurants`; Menu, orders, and table-order assignment remain later modules.
+- Restaurant Menu Categories and Items are implemented on `codex/menu` with branch visibility, scoped capabilities, same-restaurant category constraints, price/tax/preparation validation, and category soft-deactivation. Flyway V016 adds the menu tables. Maven compile passes; tests and live migration/startup checks have not been run.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 
