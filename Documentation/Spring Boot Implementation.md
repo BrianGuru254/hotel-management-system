@@ -1104,6 +1104,8 @@ CLEANING
 OUT_OF_SERVICE
 ```
 
+Runtime implementation provides branch-scoped restaurant/table listing and management. Table status transitions are validated, restaurant names and per-restaurant table numbers are case-insensitively unique, and a restaurant cannot be deactivated while tables are in use. Flyway V015 creates the tables and capability mappings. Order assignment is deferred until POS is implemented.
+
 ---
 
 # 24. Menu Module

@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Hotel Operations is in progress. Guest History is the current feature on branch `codex/guest-history`.
+Restaurant/POS is in progress. Restaurant and table management is the current feature on branch `codex/restaurants`.
 
 ## Current Goal
 
-Continue the backend module sequence with independently reviewable features on separate Git branches. Guest History combines the reservations and stays currently available for each property-owned guest.
+Continue the backend module sequence with independently reviewable features on separate Git branches. Restaurant and restaurant-table management are implemented in the current feature branch.
 
 ## Completed (Observed)
 
@@ -56,7 +56,7 @@ Continue the backend module sequence with independently reviewable features on s
 ## Next Up
 
 1. Re-establish database and signing-secret environment values, then apply/verify V006–V010 against Supabase and confirm Hibernate schema validation and application startup.
-2. Proceed through Restaurant/POS and the other documented modules in dependency order.
+2. Implement Menu and POS/Orders, then Kitchen, Inventory/Procurement, Finance, and the remaining documented modules in dependency order.
 3. Continue the remaining documented backend modules in dependency order: Restaurant/POS, Inventory/Procurement, Finance, and supporting/reporting services. Keep the frontend untouched.
 
 ## Open Decisions
@@ -79,6 +79,7 @@ Continue the backend module sequence with independently reviewable features on s
 - Maintenance is implemented on `codex/maintenance`; V014 links assigned employees, whose accounts must hold the live maintenance-update capability within the request property.
 - Employee management is implemented on `codex/employees`; records are branch-owned, optionally department- and user-linked, organization-unique, and soft-archived.
 - Guest History is implemented on `codex/guest-history` for reservations and primary/additional guest stays. Orders, invoices, payments, and loyalty are explicitly returned as unavailable pending those modules.
+- Branch-scoped Restaurants and Restaurant Tables are implemented on `codex/restaurants`; Menu, orders, and table-order assignment remain later modules.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 

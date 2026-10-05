@@ -1357,6 +1357,8 @@ GET /api/v1/restaurants/{id}
 POST /api/v1/restaurants
 ```
 
+Request fields: `branchId`, `name`, optional `description`, `openingTime`, `closingTime`, and `active`. Restaurant and table APIs require matching branch-scoped capabilities. Names are unique without regard to case within a branch.
+
 ## Update Restaurant
 
 ```http
@@ -1378,6 +1380,8 @@ GET /api/v1/restaurants/{restaurantId}/tables
 ```http
 POST /api/v1/restaurants/{restaurantId}/tables
 ```
+
+Table requests require a unique `tableNumber` and positive `capacity`; `location` is optional. Tables begin as AVAILABLE. Status transitions are constrained by the current table status; occupied tables must move through CLEANING before returning to AVAILABLE.
 
 Request:
 

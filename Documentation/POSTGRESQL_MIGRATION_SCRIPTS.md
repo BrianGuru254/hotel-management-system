@@ -1190,6 +1190,8 @@ CREATE TABLE maintenance_requests (
 
 # 30. Restaurants
 
+Runtime implementation: Flyway V015 adds case-insensitive branch-local restaurant names, per-restaurant table numbers, capacity/status checks, and restaurant/table capability mappings. Table changes are audited through timestamps; order assignment is part of the later POS module.
+
 ```sql
 CREATE TABLE restaurants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
