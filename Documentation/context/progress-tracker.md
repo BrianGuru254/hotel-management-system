@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Restaurant/POS is in progress. Restaurant and table management is the current feature on branch `codex/restaurants`.
+Restaurant/POS is in progress. POS order management is the current feature on branch `codex/orders`.
 
 ## Current Goal
 
-Continue the backend module sequence with independently reviewable features on separate Git branches. Restaurant and restaurant-table management are implemented in the current feature branch.
+Continue the backend module sequence with independently reviewable features on separate Git branches. Restaurant, menu, and POS order entry are implemented in their respective feature branches.
 
 ## Completed (Observed)
 
@@ -55,8 +55,8 @@ Continue the backend module sequence with independently reviewable features on s
 
 ## Next Up
 
-1. Implement POS/Orders and table-order assignment, then Kitchen, Inventory/Procurement, Finance, and remaining documented modules in dependency order.
-2. Re-establish database and signing-secret environment values, then apply/verify V006–V016 against Supabase and confirm Hibernate schema validation and application startup.
+1. Implement Kitchen ticket workflows and order lifecycle transitions, then Inventory/Procurement, Finance, and remaining documented modules in dependency order.
+2. Re-establish database and signing-secret environment values, then apply/verify V006–V017 against Supabase and confirm Hibernate schema validation and application startup.
 3. Keep the frontend untouched while completing the documented backend modules.
 
 ## Open Decisions
@@ -81,6 +81,7 @@ Continue the backend module sequence with independently reviewable features on s
 - Guest History is implemented on `codex/guest-history` for reservations and primary/additional guest stays. Orders, invoices, payments, and loyalty are explicitly returned as unavailable pending those modules.
 - Branch-scoped Restaurants and Restaurant Tables are implemented on `codex/restaurants`; Menu, orders, and table-order assignment remain later modules.
 - Restaurant Menu Categories and Items are implemented on `codex/menu` with branch visibility, scoped capabilities, same-restaurant category constraints, price/tax/preparation validation, and category soft-deactivation. Flyway V016 adds the menu tables. Maven compile passes; tests and live migration/startup checks have not been run.
+- Restaurant Orders are implemented on `codex/orders` with branch-scoped listing, table/guest/stay validation, draft line-item management, server-calculated subtotal/tax/total, menu-price snapshots, table occupation on submission, and draft/placed cancellation. Flyway V017 adds order/line tables and POS cashier update permission. Maven compile passes; tests and live migration/startup checks have not been run.
 - KES and Africa/Nairobi are current defaults in configuration/domain specifications; branch-level formatting and configuration behavior needs confirmation in the full UI/API.
 - Migrations should be managed in the configured `backend/src/main/resources/db/migration/` path.
 

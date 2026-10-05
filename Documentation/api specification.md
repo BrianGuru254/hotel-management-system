@@ -1531,6 +1531,8 @@ orderType
 date
 ```
 
+Results are restricted to branches granted by the caller's live `ORDER_READ` scope. `date` selects a UTC calendar day. Pagination defaults to 20 rows (maximum 100), newest first.
+
 ## Get Order
 
 ```http
@@ -1550,6 +1552,7 @@ Request:
   "restaurantId": "UUID",
   "tableId": "UUID",
   "guestId": "UUID",
+  "stayId": "UUID",
   "orderType": "DINE_IN",
   "items": [
     {
@@ -1561,6 +1564,8 @@ Request:
   "notes": "Customer order"
 }
 ```
+
+Orders are created as `DRAFT`. Dine-in requires a table from the same restaurant; room service requires an active same-branch stay. Guest, stay, table, and menu references are validated against the restaurant's branch. The API snapshots current menu prices/tax and calculates subtotal, tax, and total on the server.
 
 ## Add Item
 
@@ -1591,6 +1596,8 @@ POST /api/v1/orders/{id}/submit
 ```http
 POST /api/v1/orders/{id}/cancel
 ```
+
+Line items can only be added, changed, or removed while the order is `DRAFT`. Submission changes the order to `PLACED` and marks its table occupied. POS cancellation is available for `DRAFT` and `PLACED` orders; later kitchen status transitions are handled by the Kitchen module.
 
 ---
 

@@ -59,6 +59,8 @@ Restaurants belong to branches; tables belong to one restaurant. Restaurant and 
 
 Restaurant menus are branch-scoped through their owning restaurant. Categories and items are soft-deactivated/availability-managed, and items must reference a category from the same restaurant. Menu listing is restricted to the caller's visible branches; `MENU_READ`, `MENU_CREATE`, and `MENU_UPDATE` are the live capabilities. Flyway V016 adds menu category/item storage and scope constraints.
 
+Restaurant orders belong to one restaurant and optionally reference its table, a guest in the same branch, and an active same-branch stay. Draft line changes require `ORDER_UPDATE`; order creation and reads use their own live capabilities and branch scope. Menu names, SKUs, prices, and tax rates are snapshotted into order lines, with all totals calculated server-side. Drafts can be submitted or cancelled; kitchen lifecycle transitions and invoice/payment posting remain later modules. Flyway V017 adds order and line storage.
+
 Reservations and Stays are also Property-scoped. Reservations reference a guest, room type, and optional room from that same property, and the database reinforces this with composite foreign keys. Check-in requires a confirmed reservation or an explicitly scoped walk-in; each active Stay locks one physical room. Guest assignments on a Stay are property-bound. Check-out moves the room to DIRTY and updates the reservation lifecycle. Checkout preview is an estimate from the saved nightly rate and deposit; payments, folios, and invoicing remain later Finance work. Stay checkout is stored as a local date to align with reservation dates, while actual check-in/out timestamps remain timezone-aware.
 
 ## Invariants
